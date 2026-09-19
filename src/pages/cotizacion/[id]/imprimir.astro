@@ -37,7 +37,6 @@ const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
           <span>{empresa.bajada}</span>
           <div class="datos">
             {empresa.responsable}<br />
-            Cédula profesional {empresa.cedula}<br />
             {empresa.telefono} · {empresa.correo}<br />
             {empresa.ciudad} · {empresa.sitio}
           </div>
@@ -143,10 +142,7 @@ const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
         </div>
         <div>
           <span class="etq">Atentamente</span>
-          <div class="doc-firma">
-            {empresa.responsable}<br />
-            Cédula profesional {empresa.cedula}
-          </div>
+          <div class="doc-firma">{empresa.responsable}</div>
         </div>
       </footer>
     </article>
