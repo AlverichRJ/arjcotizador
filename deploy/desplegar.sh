@@ -35,7 +35,10 @@ fi
 echo "==> Reiniciando el servicio"
 sudo systemctl restart arjcotizador
 sleep 2
-sudo systemctl is-active --quiet arjcotizador || {
+# sin sudo: consultar el estado no requiere privilegios, y pedirlos hacía que
+# esta comprobación fallara siempre y diera un "no levantó" falso con el
+# servicio corriendo perfectamente
+systemctl is-active --quiet arjcotizador || {
   echo "!! El servicio no levantó. Mira: journalctl -u arjcotizador -n 40" >&2
   exit 1
 }
