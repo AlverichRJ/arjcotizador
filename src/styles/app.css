@@ -179,6 +179,7 @@ input.num { font-family: var(--f-mono); text-align: right; }
 .interno::after {
   content: 'interno';
   position: absolute; top: -7px; right: 6px;
+  z-index: 1;
   background: var(--alerta); color: var(--acc-on);
   font-family: var(--f-mono); font-size: 8px; text-transform: uppercase; letter-spacing: .1em;
   padding: 1px 5px; border-radius: 2px;
@@ -190,6 +191,10 @@ input.num { font-family: var(--f-mono); text-align: right; }
 .total-celda { background: var(--bg); padding: 14px 16px; }
 .total-celda .etq { display: block; margin-bottom: 5px; }
 .total-celda b { font-family: var(--f-mono); font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+/* Aquí la etiqueta va DENTRO de la celda, no montada sobre el borde: la
+   rejilla de totales lleva overflow:hidden para redondear las esquinas, y eso
+   recortaba por la mitad cualquier cosa que sobresaliera. */
+.total-celda.interno::after { top: 10px; right: 12px; }
 .total-celda.destacado { background: var(--dark); }
 .total-celda.destacado .etq { color: var(--on-dark-2); }
 .total-celda.destacado b { color: var(--acc); font-size: 24px; }
