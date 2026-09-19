@@ -1,0 +1,37 @@
+# Bloque para /etc/caddy/Caddyfile — cotizador interno.
+#
+# {{HASH}} lo sustituye instalar.sh por el hash bcrypt de la contraseña.
+#
+# La contraseña se pide AQUÍ, en el borde: una petición sin credenciales nunca
+# llega al proceso de Node. Y el proceso escucha solo en 127.0.0.1, así que no
+# hay forma de esquivar a Caddy desde fuera.
+
+cotizador.alverichrj.tech {
+	basic_auth {
+		alberto {{HASH}}
+	}
+
+	reverse_proxy 127.0.0.1:4322 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	encode zstd gzip
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		X-Frame-Options "DENY"
+		# Es una herramienta interna: que no la indexe nadie, jamás.
+		X-Robots-Tag "noindex, nofollow, noarchive"
+	}
+
+	log {
+		output file /var/log/caddy/cotizador.log {
+			roll_size 5MiB
+			roll_keep 5
+		}
+	}
+}

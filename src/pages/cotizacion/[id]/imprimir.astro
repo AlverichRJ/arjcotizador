@@ -1,0 +1,158 @@
+---
+import App from '../../../layouts/App.astro';
+import { obtenerCotizacion, partidasDe } from '../../../db/index';
+import { pesos, importe, totales, fechaLarga, sumarDias } from '../../../lib/dinero';
+import { empresa } from '../../../datos/empresa';
+
+export const prerender = false;
+
+const id = Number(Astro.params.id);
+const cot = obtenerCotizacion(id);
+if (!cot) return new Response('No existe esa cotización', { status: 404 });
+
+const partidas = partidasDe(id);
+const t = totales(partidas);
+const vence = sumarDias(cot.fecha, cot.vigencia_dias);
+const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
+---
+
+<App titulo={`${cot.folio} — documento`}>
+  <div class="wrap">
+    <div class="barra no-imprimir">
+      <a class="btn gris" href={`/cotizacion/${id}`}>Volver a editar</a>
+      <span class="sep"></span>
+      <button class="btn" type="button" id="imprimir">Descargar PDF</button>
+    </div>
+
+    <p class="aviso no-imprimir">
+      Al pulsar «Descargar PDF» se abre el diálogo de impresión: elige
+      <b>«Guardar como PDF»</b> como destino. Lo que ves aquí es exactamente lo
+      que sale, y no incluye ni tus enlaces de compra ni tus costos.
+    </p>
+
+    <article class="hoja">
+      <header class="doc-cabeza">
+        <div class="doc-marca">
+          <b>ARJ<em>·</em>Solutions</b>
+          <span>{empresa.bajada}</span>
+          <div class="datos">
+            {empresa.responsable}<br />
+            Cédula profesional {empresa.cedula}<br />
+            {empresa.telefono} · {empresa.correo}<br />
+            {empresa.ciudad} · {empresa.sitio}
+          </div>
+        </div>
+        <div class="doc-folio">
+          <div class="tipo">Orden de cotización</div>
+          <div class="num">{cot.folio}</div>
+          <div class="fechas">
+            Fecha: {fechaLarga(cot.fecha)}<br />
+            Vigencia: {fechaLarga(vence)}
+            {cot.orden_compra && (
+              <Fragment>
+                <br />
+                Orden de compra: {cot.orden_compra}
+              </Fragment>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <section class="doc-partes">
+        <div>
+          <span class="etq">Cotización para</span>
+          <div class="quien">
+            <b>{cot.cliente_empresa || cot.cliente_nombre || 'Por definir'}</b>
+            {cot.cliente_empresa && cot.cliente_nombre && <Fragment>{cot.cliente_nombre}<br /></Fragment>}
+            {cot.cliente_direccion && <Fragment>{cot.cliente_direccion}<br /></Fragment>}
+            {cot.cliente_telefono && <Fragment>{cot.cliente_telefono}<br /></Fragment>}
+            {cot.cliente_correo}
+          </div>
+        </div>
+        <div>
+          <span class="etq">Proyecto</span>
+          <div class="quien">
+            <b>{cot.proyecto || '—'}</b>
+          </div>
+        </div>
+      </section>
+
+      <table class="doc">
+        <thead>
+          <tr>
+            <th style="width:34px">#</th>
+            <th style="width:70px">Foto</th>
+            <th>Descripción</th>
+            <th class="cen" style="width:64px">Cant.</th>
+            <th class="der" style="width:100px">P. unitario</th>
+            <th class="der" style="width:110px">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            partidas.map((p, i) => (
+              <tr>
+                <td class="doc-num">{String(i + 1).padStart(2, '0')}</td>
+                <td>
+                  <div class="doc-foto">
+                    {p.imagen && <img src={`/imagen/${p.imagen}`} alt="" />}
+                  </div>
+                </td>
+                <td class="doc-desc">
+                  <b>{p.descripcion || 'Sin descripción'}</b>
+                  {p.marca && <span>{p.marca}</span>}
+                </td>
+                <td class="cen doc-num">
+                  {p.cantidad} {p.unidad}
+                </td>
+                <td class="der doc-num">{pesos(p.precio_centavos)}</td>
+                <td class="der doc-num">{pesos(importe(p.cantidad, p.precio_centavos))}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+
+      <div class="doc-total">
+        <table>
+          <tr class="final">
+            <td>Total</td>
+            <td class="der">{pesos(t.precio)}</td>
+          </tr>
+        </table>
+      </div>
+
+      <footer class="doc-pie">
+        <div>
+          {
+            condiciones.length > 0 && (
+              <Fragment>
+                <span class="etq">Condiciones</span>
+                <p>{condiciones.map((c) => `· ${c}`).join('\n')}</p>
+              </Fragment>
+            )
+          }
+          {
+            cot.notas && (
+              <Fragment>
+                <span class="etq" style="margin-top:14px">Notas</span>
+                <p>{cot.notas}</p>
+              </Fragment>
+            )
+          }
+        </div>
+        <div>
+          <span class="etq">Atentamente</span>
+          <div class="doc-firma">
+            {empresa.responsable}<br />
+            Cédula profesional {empresa.cedula}
+          </div>
+        </div>
+      </footer>
+    </article>
+  </div>
+</App>
+
+<script>
+  document.getElementById('imprimir')?.addEventListener('click', () => window.print());
+</script>

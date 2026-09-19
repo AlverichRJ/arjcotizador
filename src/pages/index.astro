@@ -1,0 +1,109 @@
+---
+import App from '../layouts/App.astro';
+import { listarCotizaciones, partidasDe, crearCotizacion } from '../db/index';
+import { pesos, totales, fechaLarga } from '../lib/dinero';
+
+export const prerender = false;
+
+// "Nueva cotización" es un POST, no un enlace: así no se crea una cotización
+// vacía cada vez que alguien recarga la página o vuelve con el botón atrás.
+if (Astro.request.method === 'POST') {
+  const id = crearCotizacion();
+  return Astro.redirect(`/cotizacion/${id}`, 303);
+}
+
+const cotizaciones = listarCotizaciones().map((c) => {
+  const t = totales(partidasDe(c.id));
+  return { ...c, t };
+});
+
+const anio = new Date().getFullYear();
+const delAnio = cotizaciones.filter((c) => c.anio === anio);
+const aceptadas = delAnio.filter((c) => c.estado === 'aceptada');
+const sumaAceptadas = aceptadas.reduce((a, c) => a + c.t.precio, 0);
+const margenAceptadas = aceptadas.reduce((a, c) => a + c.t.margen, 0);
+---
+
+<App titulo="Cotizaciones">
+  <div class="wrap">
+    <div class="barra">
+      <h1>Cotizaciones</h1>
+      <span class="sep"></span>
+      <form method="POST">
+        <button class="btn" type="submit">Nueva cotización</button>
+      </form>
+    </div>
+
+    {
+      cotizaciones.length > 0 && (
+        <div class="totales" style="margin-bottom:18px">
+          <div class="total-celda">
+            <span class="etq">Cotizaciones {anio}</span>
+            <b>{delAnio.length}</b>
+          </div>
+          <div class="total-celda">
+            <span class="etq">Aceptadas</span>
+            <b>{aceptadas.length}</b>
+          </div>
+          <div class="total-celda">
+            <span class="etq">Vendido {anio}</span>
+            <b>{pesos(sumaAceptadas)}</b>
+          </div>
+          <div class="total-celda">
+            <span class="etq">Margen {anio}</span>
+            <b class={margenAceptadas >= 0 ? 'bien' : 'mal'}>{pesos(margenAceptadas)}</b>
+          </div>
+        </div>
+      )
+    }
+
+    {
+      cotizaciones.length === 0 ? (
+        <div class="vacio">
+          <p>
+            <b>Todavía no hay ninguna cotización.</b>
+          </p>
+          <p style="margin-top:8px">
+            Pulsa «Nueva cotización», pega los enlaces de los productos y el
+            cotizador hace el resto.
+          </p>
+        </div>
+      ) : (
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Folio</th>
+              <th>Cliente</th>
+              <th>Proyecto</th>
+              <th>Fecha</th>
+              <th class="der">Partidas</th>
+              <th class="der">Total</th>
+              <th class="der">Margen</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cotizaciones.map((c) => (
+              <tr>
+                <td>
+                  <a class="folio" href={`/cotizacion/${c.id}`}>
+                    {c.folio}
+                  </a>
+                </td>
+                <td>{c.cliente_empresa || c.cliente_nombre || '—'}</td>
+                <td>{c.proyecto || '—'}</td>
+                <td>{fechaLarga(c.fecha)}</td>
+                <td class="der doc-num">{partidasDe(c.id).length}</td>
+                <td class="der doc-num">{pesos(c.t.precio)}</td>
+                <td class="der doc-num">{pesos(c.t.margen)}</td>
+                <td>
+                  <span class={`estado ${c.estado}`}>{c.estado}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  </div>
+</App>

@@ -1,0 +1,288 @@
+/* ===========================================================================
+   Cotizador interno de ARJ Solutions.
+
+   Dos pieles en una hoja:
+   · la de trabajo, densa, pensada para teclear rápido;
+   · la de impresión (@media print), que es el documento que ve el cliente.
+
+   Los tokens son los mismos que los del sitio público, para que la cotización
+   impresa se reconozca como tuya.
+   =========================================================================== */
+
+:root {
+  --paper: #f1f2f0;
+  --bg: #ffffff;
+  --ink: #14171a;
+  --ink-2: #4a5159;
+  --muted: #8a9099;
+  --line: #d7dade;
+  --line-2: #eaeced;
+  --dark: #101418;
+  --dark-line: #29313a;
+  --on-dark: #eef0f2;
+  --on-dark-2: #9aa3ac;
+
+  --acc: #0b5fce;
+  --acc-2: #084ba6;
+  --acc-10: #0b5fce1a;
+  --acc-on: #ffffff;
+
+  --ok: #15803d;
+  --alerta: #b45309;
+  --mal: #b91c1c;
+
+  --r: 3px;
+  --maxw: 1240px;
+  --f-disp: 'Archivo Variable', 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-disp);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.025em; line-height: 1.15; }
+p { margin: 0; }
+a { color: var(--acc); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; display: block; }
+
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+
+.mono, .etq {
+  font-family: var(--f-mono);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* --- cabecera de la aplicación ------------------------------------------ */
+
+.top { background: var(--dark); color: var(--on-dark); border-bottom: 2px solid var(--acc); }
+.top .wrap { display: flex; align-items: center; gap: 16px; height: 56px; }
+.top b { font-size: 17px; letter-spacing: -.03em; }
+.top b em { font-style: normal; color: var(--acc); }
+.top .sep { flex: 1; }
+.top a { color: var(--on-dark-2); font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+.top a:hover { color: var(--on-dark); text-decoration: none; }
+
+main { padding: 24px 0 80px; }
+
+/* --- controles ----------------------------------------------------------- */
+
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 15px;
+  background: var(--acc); color: var(--acc-on);
+  border: 1px solid var(--acc); border-radius: var(--r);
+  font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .1em;
+  cursor: pointer; text-decoration: none;
+}
+.btn:hover { background: var(--acc-2); border-color: var(--acc-2); text-decoration: none; }
+.btn:active { transform: translateY(1px); }
+.btn.gris { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.gris:hover { background: var(--bg); color: var(--acc); border-color: var(--acc); }
+.btn.mal { background: transparent; color: var(--mal); border-color: var(--line); }
+.btn.mal:hover { background: var(--mal); color: var(--acc-on); border-color: var(--mal); }
+.btn.sm { padding: 6px 10px; font-size: 10px; }
+
+input, select, textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-family: inherit; font-size: 14px; color: var(--ink);
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--acc); outline-offset: -1px; border-color: var(--acc); }
+textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
+input.num { font-family: var(--f-mono); text-align: right; }
+
+.campo { display: block; }
+.campo > span { display: block; margin-bottom: 5px; font-family: var(--f-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+
+.caja { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; }
+.caja + .caja { margin-top: 16px; }
+.caja > h2 { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .14em; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line-2); }
+
+.rejilla { display: grid; gap: 12px; }
+.rejilla.c2 { grid-template-columns: repeat(2, 1fr); }
+.rejilla.c3 { grid-template-columns: repeat(3, 1fr); }
+.rejilla.c4 { grid-template-columns: repeat(4, 1fr); }
+
+.barra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+.barra h1 { font-size: 24px; }
+.barra .sep { flex: 1; }
+
+.aviso { padding: 11px 14px; border-radius: var(--r); font-size: 13.5px; border: 1px solid var(--line); background: var(--acc-10); margin-bottom: 16px; }
+
+/* --- listado de cotizaciones -------------------------------------------- */
+
+.tabla { width: 100%; border-collapse: collapse; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); }
+.tabla th {
+  text-align: left; padding: 11px 14px;
+  font-family: var(--f-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--muted); border-bottom: 1px solid var(--line);
+}
+.tabla td { padding: 12px 14px; border-bottom: 1px solid var(--line-2); font-size: 14px; }
+.tabla tr:last-child td { border-bottom: 0; }
+.tabla tr:hover td { background: var(--paper); }
+.tabla .der { text-align: right; }
+.folio { font-family: var(--f-mono); font-weight: 600; letter-spacing: .04em; }
+
+.estado { display: inline-block; padding: 3px 8px; border-radius: 2px; font-family: var(--f-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--acc-on); }
+.estado.borrador { background: var(--muted); }
+.estado.enviada { background: var(--acc); }
+.estado.aceptada { background: var(--ok); }
+.estado.rechazada { background: var(--mal); }
+
+.vacio { background: var(--bg); border: 1px dashed var(--line); border-radius: var(--r); padding: 42px; text-align: center; color: var(--ink-2); }
+
+/* --- partidas ------------------------------------------------------------ */
+
+.partida { border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); padding: 14px; margin-bottom: 12px; }
+.partida-top { display: flex; gap: 14px; align-items: flex-start; }
+.partida-n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); padding-top: 8px; min-width: 22px; }
+
+.miniatura {
+  width: 74px; height: 74px; flex: none;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.miniatura img { width: 100%; height: 100%; object-fit: contain; }
+.miniatura span { font-family: var(--f-mono); font-size: 8.5px; color: var(--muted); text-align: center; padding: 4px; }
+
+.partida-campos { flex: 1; display: grid; gap: 10px; }
+.partida-cifras { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-items: end; }
+.importe { font-family: var(--f-mono); font-size: 16px; font-weight: 600; text-align: right; padding-bottom: 8px; }
+.margen-linea { font-family: var(--f-mono); font-size: 10px; text-align: right; color: var(--muted); }
+.margen-linea.bien { color: var(--ok); }
+.margen-linea.mal { color: var(--mal); }
+
+.partida-acciones { display: flex; gap: 6px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-2); }
+.partida-acciones .sep { flex: 1; }
+
+/* interno: lo que nunca sale en el PDF, marcado también en pantalla */
+.interno { position: relative; }
+.interno::after {
+  content: 'interno';
+  position: absolute; top: -7px; right: 6px;
+  background: var(--alerta); color: var(--acc-on);
+  font-family: var(--f-mono); font-size: 8px; text-transform: uppercase; letter-spacing: .1em;
+  padding: 1px 5px; border-radius: 2px;
+}
+
+/* --- totales ------------------------------------------------------------- */
+
+.totales { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.total-celda { background: var(--bg); padding: 14px 16px; }
+.total-celda .etq { display: block; margin-bottom: 5px; }
+.total-celda b { font-family: var(--f-mono); font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+.total-celda.destacado { background: var(--dark); }
+.total-celda.destacado .etq { color: var(--on-dark-2); }
+.total-celda.destacado b { color: var(--acc); font-size: 24px; }
+.total-celda .bien { color: var(--ok); }
+.total-celda .mal { color: var(--mal); }
+
+/* ===========================================================================
+   EL DOCUMENTO: se ve igual en pantalla y en el PDF
+   =========================================================================== */
+
+.hoja {
+  background: var(--bg);
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 38px 40px 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.doc-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 18px; border-bottom: 2px solid var(--acc); }
+.doc-marca b { display: block; font-size: 26px; letter-spacing: -.035em; }
+.doc-marca b em { font-style: normal; color: var(--acc); }
+.doc-marca span { display: block; margin-top: 4px; font-family: var(--f-mono); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.doc-marca .datos { margin-top: 10px; font-size: 11.5px; color: var(--ink-2); line-height: 1.55; text-transform: none; letter-spacing: 0; font-family: var(--f-disp); }
+
+.doc-folio { text-align: right; flex: none; }
+.doc-folio .tipo { font-family: var(--f-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
+.doc-folio .num { font-family: var(--f-mono); font-size: 21px; font-weight: 600; color: var(--acc); letter-spacing: .02em; margin-top: 3px; }
+.doc-folio .fechas { margin-top: 8px; font-size: 11.5px; color: var(--ink-2); line-height: 1.5; }
+
+.doc-partes { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+.doc-partes .etq { display: block; margin-bottom: 6px; }
+.doc-partes .quien { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+.doc-partes .quien b { display: block; font-size: 15px; color: var(--ink); }
+
+table.doc { width: 100%; border-collapse: collapse; margin-top: 22px; }
+table.doc th {
+  text-align: left; padding: 8px 9px;
+  font-family: var(--f-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--on-dark); background: var(--dark);
+}
+table.doc th.der, table.doc td.der { text-align: right; }
+table.doc th.cen, table.doc td.cen { text-align: center; }
+table.doc td { padding: 10px 9px; border-bottom: 1px solid var(--line-2); font-size: 12.5px; vertical-align: top; }
+table.doc tbody tr:nth-child(even) td { background: #fafbfb; }
+
+.doc-foto { width: 58px; height: 58px; border: 1px solid var(--line); border-radius: 2px; background: var(--paper); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.doc-foto img { width: 100%; height: 100%; object-fit: contain; }
+.doc-desc b { display: block; font-size: 13px; line-height: 1.35; }
+.doc-desc span { display: block; margin-top: 3px; font-family: var(--f-mono); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.doc-num { font-family: var(--f-mono); font-size: 12.5px; white-space: nowrap; }
+
+.doc-total { margin-top: 18px; display: flex; justify-content: flex-end; }
+.doc-total table { border-collapse: collapse; min-width: 290px; }
+.doc-total td { padding: 9px 12px; font-size: 13.5px; }
+.doc-total tr.final td { background: var(--dark); color: var(--on-dark); font-family: var(--f-mono); font-weight: 600; font-size: 16px; }
+.doc-total tr.final td.der { color: var(--acc); }
+.doc-total td.der { text-align: right; font-family: var(--f-mono); }
+
+.doc-pie { margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1.3fr 1fr; gap: 26px; }
+.doc-pie .etq { display: block; margin-bottom: 6px; }
+.doc-pie p { font-size: 12px; color: var(--ink-2); line-height: 1.6; white-space: pre-line; }
+.doc-firma { margin-top: 42px; border-top: 1px solid var(--ink); padding-top: 7px; font-size: 11.5px; color: var(--ink-2); text-align: center; }
+
+.solo-pantalla { display: block; }
+
+/* --- impresión: esto ES el PDF ------------------------------------------ */
+
+@media print {
+  @page { size: letter portrait; margin: 12mm 11mm; }
+
+  body { background: #fff; font-size: 11pt; }
+  .top, .barra, .solo-pantalla, .no-imprimir { display: none !important; }
+  main { padding: 0; }
+  .wrap { max-width: none; padding: 0; }
+
+  .hoja { max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; }
+
+  /* que ningún renglón se parta entre dos páginas */
+  table.doc tr { break-inside: avoid; }
+  table.doc thead { display: table-header-group; }
+  .doc-total, .doc-pie { break-inside: avoid; }
+
+  /* los fondos oscuros del encabezado y del total deben imprimirse */
+  table.doc th, .doc-total tr.final td, .doc-cabeza { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  a { color: var(--ink); text-decoration: none; }
+}
+
+@media (max-width: 900px) {
+  .rejilla.c4, .rejilla.c3, .rejilla.c2 { grid-template-columns: 1fr 1fr; }
+  .partida-cifras { grid-template-columns: 1fr 1fr; }
+  .totales { grid-template-columns: 1fr 1fr; }
+  .doc-partes, .doc-pie { grid-template-columns: 1fr; }
+  .hoja { padding: 22px; }
+}

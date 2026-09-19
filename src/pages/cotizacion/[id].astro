@@ -1,0 +1,467 @@
+---
+import App from '../../layouts/App.astro';
+import {
+  obtenerCotizacion,
+  partidasDe,
+  actualizarCotizacion,
+  actualizarPartida,
+  agregarPartida,
+  borrarPartida,
+  borrarCotizacion,
+  duplicarCotizacion,
+} from '../../db/index';
+import { guardarImagen } from '../../lib/enlace';
+import { pesos, aInput, aCentavos, aNumero, aTexto, importe, totales } from '../../lib/dinero';
+import { ESTADOS } from '../../datos/empresa';
+
+export const prerender = false;
+
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id)) return Astro.redirect('/', 303);
+
+let cot = obtenerCotizacion(id);
+if (!cot) return new Response('No existe esa cotización', { status: 404 });
+
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  const accion = aTexto(f.get('accion'));
+
+  // Siempre se guarda antes de cualquier otra acción: así nadie pierde lo que
+  // acababa de teclear por pulsar "agregar partida".
+  actualizarCotizacion(id, {
+    fecha: aTexto(f.get('fecha')) || cot.fecha,
+    estado: aTexto(f.get('estado')) || cot.estado,
+    cliente_nombre: aTexto(f.get('cliente_nombre')),
+    cliente_empresa: aTexto(f.get('cliente_empresa')),
+    cliente_correo: aTexto(f.get('cliente_correo')),
+    cliente_telefono: aTexto(f.get('cliente_telefono')),
+    cliente_direccion: aTexto(f.get('cliente_direccion')),
+    proyecto: aTexto(f.get('proyecto')),
+    orden_compra: aTexto(f.get('orden_compra')),
+    vigencia_dias: Math.max(1, Math.round(aNumero(f.get('vigencia_dias'), 15))),
+    notas: aTexto(f.get('notas')),
+    condiciones: aTexto(f.get('condiciones')),
+  });
+
+  for (const p of partidasDe(id)) {
+    const k = (campo: string) => f.get(`p-${p.id}-${campo}`);
+    if (k('descripcion') === null) continue; // la partida no venía en el formulario
+
+    const origen = aTexto(k('imagen_origen'));
+    let imagen = p.imagen;
+    // Solo se descarga cuando la URL cambió: guardar no debe salir a internet
+    // por cada partida cada vez.
+    if (origen && origen !== p.imagen_origen) imagen = await guardarImagen(origen);
+    if (!origen) imagen = '';
+
+    actualizarPartida(p.id, {
+      descripcion: aTexto(k('descripcion')),
+      marca: aTexto(k('marca')),
+      unidad: aTexto(k('unidad')) || 'pza',
+      cantidad: Math.max(0, aNumero(k('cantidad'), 1)),
+      enlace: aTexto(k('enlace')),
+      costo_centavos: aCentavos(k('costo')),
+      precio_centavos: aCentavos(k('precio')),
+      imagen_origen: origen,
+      imagen,
+    });
+  }
+
+  if (accion === 'agregar') agregarPartida(id);
+  else if (accion === 'duplicar') return Astro.redirect(`/cotizacion/${duplicarCotizacion(id)}`, 303);
+  else if (accion === 'borrar') {
+    borrarCotizacion(id);
+    return Astro.redirect('/', 303);
+  } else if (accion.startsWith('eliminar:')) borrarPartida(Number(accion.slice(9)));
+  else if (accion.startsWith('subir:') || accion.startsWith('bajar:')) {
+    const pid = Number(accion.split(':')[1]);
+    const lista = partidasDe(id);
+    const i = lista.findIndex((x) => x.id === pid);
+    const j = accion.startsWith('subir:') ? i - 1 : i + 1;
+    if (i >= 0 && j >= 0 && j < lista.length) {
+      actualizarPartida(lista[i].id, { orden: j + 1 });
+      actualizarPartida(lista[j].id, { orden: i + 1 });
+    }
+  }
+
+  return Astro.redirect(`/cotizacion/${id}`, 303);
+}
+
+cot = obtenerCotizacion(id)!;
+const partidas = partidasDe(id);
+const t = totales(partidas);
+---
+
+<App titulo={cot.folio}>
+  <div class="wrap">
+    <div class="barra">
+      <h1>{cot.folio}</h1>
+      <span class={`estado ${cot.estado}`}>{cot.estado}</span>
+      <span class="sep"></span>
+      <a class="btn gris" href="/">Volver</a>
+      <a class="btn" href={`/cotizacion/${id}/imprimir`}>Ver e imprimir PDF</a>
+    </div>
+
+    <form method="POST" id="f">
+      <div class="caja">
+        <h2>Cliente y proyecto</h2>
+        <div class="rejilla c2">
+          <label class="campo">
+            <span>Empresa</span>
+            <input name="cliente_empresa" value={cot.cliente_empresa} autocomplete="off" />
+          </label>
+          <label class="campo">
+            <span>Persona de contacto</span>
+            <input name="cliente_nombre" value={cot.cliente_nombre} autocomplete="off" />
+          </label>
+          <label class="campo">
+            <span>Correo</span>
+            <input name="cliente_correo" type="email" value={cot.cliente_correo} autocomplete="off" />
+          </label>
+          <label class="campo">
+            <span>Teléfono</span>
+            <input name="cliente_telefono" value={cot.cliente_telefono} autocomplete="off" />
+          </label>
+        </div>
+        <div class="rejilla" style="margin-top:12px">
+          <label class="campo">
+            <span>Dirección o sitio de la obra</span>
+            <input name="cliente_direccion" value={cot.cliente_direccion} autocomplete="off" />
+          </label>
+        </div>
+        <div class="rejilla c4" style="margin-top:12px">
+          <label class="campo" style="grid-column:span 2">
+            <span>Proyecto</span>
+            <input
+              name="proyecto"
+              value={cot.proyecto}
+              placeholder="Red y CCTV para bodega"
+              autocomplete="off"
+            />
+          </label>
+          <label class="campo">
+            <span>Orden de compra del cliente</span>
+            <input name="orden_compra" value={cot.orden_compra} autocomplete="off" />
+          </label>
+          <label class="campo">
+            <span>Estado</span>
+            <select name="estado">
+              {ESTADOS.map((e) => (
+                <option value={e} selected={e === cot.estado}>
+                  {e}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div class="rejilla c4" style="margin-top:12px">
+          <label class="campo">
+            <span>Fecha</span>
+            <input name="fecha" type="date" value={cot.fecha} />
+          </label>
+          <label class="campo">
+            <span>Vigencia (días)</span>
+            <input class="num" name="vigencia_dias" type="number" min="1" value={cot.vigencia_dias} />
+          </label>
+        </div>
+      </div>
+
+      <div class="caja">
+        <h2>Partidas</h2>
+
+        {
+          partidas.length === 0 && (
+            <p style="color:var(--ink-2);font-size:14px;margin-bottom:14px">
+              Aún no hay partidas. Agrega una, pega el enlace del producto y pulsa
+              «Leer enlace»: se rellenan solos el nombre y la foto.
+            </p>
+          )
+        }
+
+        {
+          partidas.map((p, i) => (
+            <div class="partida" data-partida={p.id}>
+              <div class="partida-top">
+                <div class="partida-n">{String(i + 1).padStart(2, '0')}</div>
+
+                <div class="miniatura" data-mini>
+                  {p.imagen ? (
+                    <img src={`/imagen/${p.imagen}`} alt="" />
+                  ) : (
+                    <span>sin foto</span>
+                  )}
+                </div>
+
+                <div class="partida-campos">
+                  <label class="campo">
+                    <span>Descripción (esto ve el cliente)</span>
+                    <input
+                      name={`p-${p.id}-descripcion`}
+                      value={p.descripcion}
+                      placeholder="Cámara IP domo 4 MP"
+                      autocomplete="off"
+                    />
+                  </label>
+
+                  <div class="rejilla c2">
+                    <label class="campo interno">
+                      <span>Enlace donde lo compras</span>
+                      <input
+                        name={`p-${p.id}-enlace`}
+                        value={p.enlace}
+                        placeholder="https://..."
+                        data-enlace
+                        autocomplete="off"
+                      />
+                    </label>
+                    <label class="campo">
+                      <span>URL de la imagen</span>
+                      <input
+                        name={`p-${p.id}-imagen_origen`}
+                        value={p.imagen_origen}
+                        placeholder="https://... (se guarda una copia)"
+                        data-imagen
+                        autocomplete="off"
+                      />
+                    </label>
+                  </div>
+
+                  <div class="partida-cifras">
+                    <label class="campo">
+                      <span>Marca</span>
+                      <input name={`p-${p.id}-marca`} value={p.marca} data-marca autocomplete="off" />
+                    </label>
+                    <label class="campo">
+                      <span>Unidad</span>
+                      <input name={`p-${p.id}-unidad`} value={p.unidad} autocomplete="off" />
+                    </label>
+                    <label class="campo">
+                      <span>Cantidad</span>
+                      <input
+                        class="num"
+                        name={`p-${p.id}-cantidad`}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={p.cantidad}
+                        data-cant
+                      />
+                    </label>
+                    <label class="campo interno">
+                      <span>Costo unitario</span>
+                      <input
+                        class="num"
+                        name={`p-${p.id}-costo`}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={aInput(p.costo_centavos)}
+                        data-costo
+                      />
+                    </label>
+                    <label class="campo">
+                      <span>Precio unitario</span>
+                      <input
+                        class="num"
+                        name={`p-${p.id}-precio`}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={aInput(p.precio_centavos)}
+                        data-precio
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div style="min-width:130px">
+                  <span class="etq" style="display:block;text-align:right">Importe</span>
+                  <div class="importe" data-importe>
+                    {pesos(importe(p.cantidad, p.precio_centavos))}
+                  </div>
+                  <div class="margen-linea" data-margen-linea />
+                </div>
+              </div>
+
+              <div class="partida-acciones">
+                <button class="btn gris sm" type="button" data-leer>
+                  Leer enlace
+                </button>
+                {p.enlace && (
+                  <a class="btn gris sm" href={p.enlace} target="_blank" rel="noopener">
+                    Abrir tienda
+                  </a>
+                )}
+                <span class="sep" />
+                <button class="btn gris sm" type="submit" name="accion" value={`subir:${p.id}`}>
+                  ↑
+                </button>
+                <button class="btn gris sm" type="submit" name="accion" value={`bajar:${p.id}`}>
+                  ↓
+                </button>
+                <button
+                  class="btn mal sm"
+                  type="submit"
+                  name="accion"
+                  value={`eliminar:${p.id}`}
+                  data-confirmar="¿Eliminar esta partida?"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))
+        }
+
+        <button class="btn" type="submit" name="accion" value="agregar">+ Agregar partida</button>
+      </div>
+
+      <div class="caja">
+        <h2>Totales</h2>
+        <div class="totales">
+          <div class="total-celda">
+            <span class="etq">Partidas</span>
+            <b data-tot-partidas>{partidas.length}</b>
+          </div>
+          <div class="total-celda interno">
+            <span class="etq">Tu costo</span>
+            <b data-tot-costo>{pesos(t.costo)}</b>
+          </div>
+          <div class="total-celda interno">
+            <span class="etq">Tu margen</span>
+            <b class={t.margen >= 0 ? 'bien' : 'mal'} data-tot-margen>
+              {pesos(t.margen)} <small data-tot-margen-pct>({t.margenPct.toFixed(1)}%)</small>
+            </b>
+          </div>
+          <div class="total-celda destacado">
+            <span class="etq">Total al cliente</span>
+            <b data-tot-precio>{pesos(t.precio)}</b>
+          </div>
+        </div>
+      </div>
+
+      <div class="caja">
+        <h2>Notas y condiciones</h2>
+        <div class="rejilla c2">
+          <label class="campo">
+            <span>Notas para el cliente</span>
+            <textarea name="notas" rows="4">{cot.notas}</textarea>
+          </label>
+          <label class="campo">
+            <span>Condiciones (una por renglón)</span>
+            <textarea name="condiciones" rows="4">{cot.condiciones}</textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="barra" style="margin-top:18px">
+        <button class="btn" type="submit" name="accion" value="guardar">Guardar</button>
+        <button class="btn gris" type="submit" name="accion" value="duplicar">Duplicar</button>
+        <span class="sep"></span>
+        <button
+          class="btn mal"
+          type="submit"
+          name="accion"
+          value="borrar"
+          data-confirmar={`¿Borrar la cotización ${cot.folio} entera? No se puede deshacer.`}
+        >
+          Borrar cotización
+        </button>
+      </div>
+    </form>
+  </div>
+</App>
+
+<script>
+  const mx = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+  const form = document.getElementById('f');
+
+  /** Recalcula importes, totales y márgenes sin ir al servidor. */
+  function recalcular() {
+    let costo = 0;
+    let precio = 0;
+    document.querySelectorAll('[data-partida]').forEach((fila) => {
+      const cant = parseFloat(fila.querySelector('[data-cant]').value) || 0;
+      const c = Math.round((parseFloat(fila.querySelector('[data-costo]').value) || 0) * 100);
+      const p = Math.round((parseFloat(fila.querySelector('[data-precio]').value) || 0) * 100);
+      const impC = Math.round(cant * c);
+      const impP = Math.round(cant * p);
+      costo += impC;
+      precio += impP;
+
+      fila.querySelector('[data-importe]').textContent = mx.format(impP / 100);
+      const m = fila.querySelector('[data-margen-linea]');
+      if (c > 0 || p > 0) {
+        const dif = impP - impC;
+        const pct = impP > 0 ? (dif / impP) * 100 : 0;
+        m.textContent = `margen ${mx.format(dif / 100)} · ${pct.toFixed(0)}%`;
+        m.className = 'margen-linea ' + (dif >= 0 ? 'bien' : 'mal');
+      } else {
+        m.textContent = '';
+      }
+    });
+
+    const margen = precio - costo;
+    document.querySelector('[data-tot-costo]').textContent = mx.format(costo / 100);
+    document.querySelector('[data-tot-precio]').textContent = mx.format(precio / 100);
+    const tm = document.querySelector('[data-tot-margen]');
+    tm.firstChild.nodeValue = mx.format(margen / 100) + ' ';
+    tm.className = margen >= 0 ? 'bien' : 'mal';
+    document.querySelector('[data-tot-margen-pct]').textContent =
+      '(' + (precio > 0 ? ((margen / precio) * 100).toFixed(1) : '0.0') + '%)';
+  }
+
+  form?.addEventListener('input', (e) => {
+    if (e.target.matches('[data-cant],[data-costo],[data-precio]')) recalcular();
+  });
+  recalcular();
+
+  /* Leer el enlace del proveedor y rellenar nombre, marca e imagen. */
+  document.querySelectorAll('[data-leer]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const fila = btn.closest('[data-partida]');
+      const url = fila.querySelector('[data-enlace]').value.trim();
+      if (!url) {
+        alert('Pega primero el enlace del producto.');
+        return;
+      }
+      const original = btn.textContent;
+      btn.textContent = 'Leyendo…';
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/leer-enlace?url=' + encodeURIComponent(url));
+        const d = await r.json();
+        if (!d.ok) {
+          alert('No se pudo leer: ' + (d.error ?? 'desconocido'));
+        } else {
+          const desc = fila.querySelector('input[name$="-descripcion"]');
+          if (d.titulo && !desc.value.trim()) desc.value = d.titulo;
+          const marca = fila.querySelector('[data-marca]');
+          if (d.marca && !marca.value.trim()) marca.value = d.marca;
+          const img = fila.querySelector('[data-imagen]');
+          if (d.imagen && !img.value.trim()) {
+            img.value = d.imagen;
+            const mini = fila.querySelector('[data-mini]');
+            mini.innerHTML = '';
+            const el = document.createElement('img');
+            el.src = d.imagen;
+            el.alt = '';
+            mini.appendChild(el);
+          }
+        }
+      } catch {
+        alert('No se pudo contactar con la tienda.');
+      } finally {
+        btn.textContent = original;
+        btn.disabled = false;
+      }
+    });
+  });
+
+  /* Confirmación en lo que no tiene vuelta atrás. */
+  document.querySelectorAll('[data-confirmar]').forEach((b) => {
+    b.addEventListener('click', (e) => {
+      if (!confirm(b.dataset.confirmar)) e.preventDefault();
+    });
+  });
+</script>

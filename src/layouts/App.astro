@@ -1,0 +1,46 @@
+---
+import '@fontsource-variable/archivo';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/600.css';
+import '../styles/app.css';
+import { empresa } from '../datos/empresa';
+
+interface Props {
+  titulo: string;
+  /** La vista de impresión no lleva barra de navegación. */
+  desnudo?: boolean;
+}
+const { titulo, desnudo = false } = Astro.props;
+---
+
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{titulo} · Cotizador</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#101418" />
+  </head>
+  <body>
+    {
+      !desnudo && (
+        <header class="top no-imprimir">
+          <div class="wrap">
+            <b>
+              ARJ<em>·</em>Cotizador
+            </b>
+            <span class="sep" />
+            <a href="/">Cotizaciones</a>
+            <a href={`https://${empresa.sitio}`} target="_blank" rel="noopener">
+              Sitio
+            </a>
+          </div>
+        </header>
+      )
+    }
+    <main>
+      <slot />
+    </main>
+  </body>
+</html>

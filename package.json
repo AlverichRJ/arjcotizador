@@ -1,0 +1,31 @@
+{
+  "name": "arjcotizador",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "start": "node ./dist/server/entry.mjs",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.0.0",
+    "@fontsource-variable/archivo": "^5.1.0",
+    "@fontsource/ibm-plex-mono": "^5.1.0",
+    "astro": "^5.0.0",
+    "better-sqlite3": "^11.10.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "puppeteer-core": "^25.11.0"
+  },
+  "pnpm": {
+    "_comentario": "pnpm 10 no ejecuta scripts de instalación salvo que se autoricen. better-sqlite3 los necesita para compilar o bajar su binario nativo; sin esto, al arrancar falla con 'Could not locate the bindings file'.",
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "sharp"
+    ]
+  }
+}

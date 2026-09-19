@@ -1,0 +1,38 @@
+[Unit]
+Description=Cotizador interno de ARJ Solutions
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/srv/arjcotizador
+
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=4322
+# Dónde viven la base y las imágenes. Es LO ÚNICO que hay que respaldar.
+Environment=DATOS_DIR=/var/lib/arjcotizador
+# Orígenes permitidos para enviar formularios. Si cambia el dominio, cambia esto.
+Environment=ORIGENES=https://cotizador.alverichrj.tech
+
+ExecStart=/usr/bin/node /srv/arjcotizador/dist/server/entry.mjs
+Restart=always
+RestartSec=3
+
+# Endurecimiento: el proceso solo puede escribir donde guarda sus datos.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/arjcotizador
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=arjcotizador
+
+[Install]
+WantedBy=multi-user.target
