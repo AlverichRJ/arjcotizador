@@ -30,6 +30,10 @@ HASH="$(caddy hash-password --plaintext "$CLAVE")"
 FRAGMENTO=/etc/caddy/cotizador.caddy
 sed "s|{{HASH}}|${HASH}|; s|cotizador.alverichrj.tech|${DOMINIO}|" \
   "$(dirname "$0")/Caddyfile.fragmento" > "$FRAGMENTO"
+# El dueño tiene que ser caddy, no root: la recarga del servicio la ejecuta el
+# propio usuario caddy y, con el archivo en manos de root y permisos 600, falla
+# con "Could not import ...: permission denied" y la configuración no entra.
+chown caddy:caddy "$FRAGMENTO"
 chmod 600 "$FRAGMENTO"
 
 # Se importa desde el Caddyfile principal en vez de pegarlo dentro: así el

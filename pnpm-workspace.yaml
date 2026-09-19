@@ -1,0 +1,38 @@
+# Ajustes de pnpm.
+#
+# Van AQUÍ y no en package.json: a partir de pnpm 10.16 el campo "pnpm" del
+# package.json deja de leerse y solo avisa con un WARN fácil de pasar por alto.
+# En el VPS corre una versión más nueva que la de esta PC, así que allí se
+# ignoró en silencio y better-sqlite3 se quedó sin su binario nativo.
+
+# Dos formas de decir lo mismo, porque esta PC lleva pnpm 10 y el VPS pnpm 12:
+# la 10 entiende onlyBuiltDependencies y la 12 exige allowBuilds con un sí o un
+# no explícito por paquete. Sin esto, better-sqlite3 se instala sin su binario
+# nativo y la aplicación no arranca.
+onlyBuiltDependencies:
+  - better-sqlite3
+  - esbuild
+  - sharp
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  sharp: true
+
+# NOTA sobre minimumReleaseAge (rechazar paquetes publicados hace poco).
+#
+# El pnpm del VPS lo trae activado y rechazó la instalación porque rollup había
+# sacado versión esa misma mañana. Se intentó adoptar la regla aquí, pero
+# resulta impracticable: rollup clava sus binarios por plataforma a la versión
+# exacta del paquete principal, y detrás venían @types/node y compañía. Cada
+# día hay algún paquete recién publicado en el árbol de Astro, así que la
+# resolución nunca termina.
+#
+# Lo que protege de verdad en este proyecto es el LOCKFILE: las versiones
+# quedan fijadas y revisadas en el repositorio, y el servidor instala con
+# --frozen-lockfile, que no resuelve nada nuevo.
+#
+# Por eso la regla se desactiva PARA ESTE PROYECTO —aquí, a la vista y bajo
+# control de versiones— en vez de tocar la configuración del servidor entero,
+# donde afectaría a todo lo que se instale en esa máquina.
+minimumReleaseAge: 0
