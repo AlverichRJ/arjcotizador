@@ -1,0 +1,215 @@
+---
+/**
+ * Lista de compra: la hoja INTERNA con la que Alberto va a surtir el material.
+ *
+ * Es lo contrario del documento del cliente: aquí SÍ salen los enlaces de cada
+ * tienda y los costos, porque es lo que necesita para comprar. Nunca se manda
+ * al cliente — de ahí el aviso en rojo arriba, que también se imprime.
+ */
+import App from '../../../layouts/App.astro';
+import { obtenerCotizacion, partidasDe } from '../../../db/index';
+import { pesos, importe, totales, fechaLarga } from '../../../lib/dinero';
+
+export const prerender = false;
+
+const id = Number(Astro.params.id);
+const cot = obtenerCotizacion(id);
+if (!cot) return new Response('No existe esa cotización', { status: 404 });
+
+const partidas = partidasDe(id);
+const t = totales(partidas);
+
+/** Agrupa por tienda, que es como se compra: un pedido por proveedor. */
+function tienda(enlace: string): string {
+  try {
+    return new URL(enlace).hostname.replace(/^www\./, '');
+  } catch {
+    return 'Sin enlace';
+  }
+}
+const porTienda = new Map<string, typeof partidas>();
+for (const p of partidas) {
+  const k = tienda(p.enlace);
+  if (!porTienda.has(k)) porTienda.set(k, []);
+  porTienda.get(k)!.push(p);
+}
+const tiendas = [...porTienda.entries()].sort((a, b) => b[1].length - a[1].length);
+---
+
+<App titulo={`${cot.folio} — lista de compra`}>
+  <div class="wrap">
+    <div class="barra no-imprimir">
+      <a class="btn gris" href={`/cotizacion/${id}`}>Volver a editar</a>
+      <span class="sep"></span>
+      <button class="btn" type="button" id="imprimir">Descargar PDF</button>
+    </div>
+
+    <p class="aviso no-imprimir">
+      Esta hoja lleva tus enlaces de compra y tus costos. Es para ti.
+      Al cliente se le manda la otra: <a href={`/cotizacion/${id}/imprimir`}>la cotización</a>.
+    </p>
+
+    <article class="hoja">
+      <header class="compra-cabeza">
+        <div>
+          <span class="etq">Lista de compra · uso interno</span>
+          <h1 class="compra-folio">{cot.folio}</h1>
+          <p class="compra-sub">
+            {cot.cliente_empresa || cot.cliente_nombre || 'Sin cliente'}
+            {cot.proyecto && <Fragment> · {cot.proyecto}</Fragment>}
+            <br />
+            {fechaLarga(cot.fecha)} · {partidas.length} partidas
+          </p>
+        </div>
+        <div class="compra-total">
+          <span class="etq">Costo del material</span>
+          <b>{pesos(t.costo)}</b>
+        </div>
+      </header>
+
+      <p class="compra-aviso">
+        NO ENVIAR AL CLIENTE · contiene proveedores y costos
+      </p>
+
+      {
+        tiendas.map(([nombre, lista]) => {
+          const sub = lista.reduce((a, p) => a + importe(p.cantidad, p.costo_centavos), 0);
+          return (
+            <section class="compra-tienda">
+              <h2>
+                {nombre} <span>{lista.length} productos · {pesos(sub)}</span>
+              </h2>
+              <table class="doc compra-tabla">
+                <thead>
+                  <tr>
+                    <th style="width:32px">#</th>
+                    <th class="cen" style="width:56px">Cant.</th>
+                    <th>Producto y enlace</th>
+                    <th class="der" style="width:92px">Costo u.</th>
+                    <th class="der" style="width:100px">Importe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lista.map((p) => (
+                    <tr>
+                      <td class="doc-num">{String(partidas.indexOf(p) + 1).padStart(2, '0')}</td>
+                      <td class="cen doc-num compra-cant">
+                        {p.cantidad} {p.unidad}
+                      </td>
+                      <td class="doc-desc">
+                        <b>{p.descripcion || 'Sin descripción'}</b>
+                        {p.marca && <span>{p.marca}</span>}
+                        {p.enlace && (
+                          <a class="compra-enlace" href={p.enlace}>
+                            {p.enlace}
+                          </a>
+                        )}
+                      </td>
+                      <td class="der doc-num">{pesos(p.costo_centavos)}</td>
+                      <td class="der doc-num">{pesos(importe(p.cantidad, p.costo_centavos))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })
+      }
+
+      <div class="doc-total">
+        <table>
+          <tr class="final">
+            <td>Costo total</td>
+            <td class="der">{pesos(t.costo)}</td>
+          </tr>
+        </table>
+      </div>
+    </article>
+  </div>
+</App>
+
+<style>
+  .compra-cabeza {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--acc);
+  }
+  .compra-folio {
+    font-family: var(--f-mono);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--acc);
+    margin-top: 4px;
+  }
+  .compra-sub {
+    margin-top: 8px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  .compra-total {
+    text-align: right;
+    flex: none;
+  }
+  .compra-total b {
+    display: block;
+    font-family: var(--f-mono);
+    font-size: 22px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+  .compra-aviso {
+    margin: 14px 0 6px;
+    padding: 7px 11px;
+    background: var(--mal);
+    color: #fff;
+    border-radius: var(--r);
+    font-family: var(--f-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .compra-tienda {
+    margin-top: 18px;
+  }
+  .compra-tienda h2 {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+  }
+  .compra-tienda h2 span {
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+  .compra-tabla {
+    margin-top: 8px;
+  }
+  .compra-cant {
+    font-weight: 600;
+  }
+  .compra-enlace {
+    display: block;
+    margin-top: 3px;
+    font-family: var(--f-mono);
+    font-size: 8.5px;
+    color: var(--acc);
+    word-break: break-all;
+    line-height: 1.35;
+  }
+  @media print {
+    .compra-enlace {
+      color: var(--ink-2);
+    }
+  }
+</style>
+
+<script>
+  document.getElementById('imprimir')?.addEventListener('click', () => window.print());
+</script>
