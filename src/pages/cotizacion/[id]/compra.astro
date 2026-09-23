@@ -2,9 +2,9 @@
 /**
  * Lista de compra: la hoja INTERNA con la que Alberto va a surtir el material.
  *
- * Es lo contrario del documento del cliente: aquí SÍ salen los enlaces de cada
- * tienda y los costos, porque es lo que necesita para comprar. Nunca se manda
- * al cliente — de ahí el aviso en rojo arriba, que también se imprime.
+ * Es lo contrario del documento del cliente: aquí SÍ sale el enlace de la
+ * tienda donde se compra cada cosa, agrupado por proveedor. Nunca se manda al
+ * cliente — de ahí el aviso en rojo arriba, que también se imprime.
  */
 import App from '../../../layouts/App.astro';
 import { obtenerCotizacion, partidasDe } from '../../../db/index';
@@ -45,7 +45,7 @@ const tiendas = [...porTienda.entries()].sort((a, b) => b[1].length - a[1].lengt
     </div>
 
     <p class="aviso no-imprimir">
-      Esta hoja lleva tus enlaces de compra y tus costos. Es para ti.
+      Esta hoja lleva tus enlaces de compra y tus proveedores. Es para ti.
       Al cliente se le manda la otra: <a href={`/cotizacion/${id}/imprimir`}>la cotización</a>.
     </p>
 
@@ -62,18 +62,18 @@ const tiendas = [...porTienda.entries()].sort((a, b) => b[1].length - a[1].lengt
           </p>
         </div>
         <div class="compra-total">
-          <span class="etq">Costo del material</span>
-          <b>{pesos(t.costo)}</b>
+          <span class="etq">Total del material</span>
+          <b>{pesos(t.precio)}</b>
         </div>
       </header>
 
       <p class="compra-aviso">
-        NO ENVIAR AL CLIENTE · contiene proveedores y costos
+        NO ENVIAR AL CLIENTE · contiene tus proveedores
       </p>
 
       {
         tiendas.map(([nombre, lista]) => {
-          const sub = lista.reduce((a, p) => a + importe(p.cantidad, p.costo_centavos), 0);
+          const sub = lista.reduce((a, p) => a + importe(p.cantidad, p.precio_centavos), 0);
           return (
             <section class="compra-tienda">
               <h2>
@@ -85,7 +85,7 @@ const tiendas = [...porTienda.entries()].sort((a, b) => b[1].length - a[1].lengt
                     <th style="width:32px">#</th>
                     <th class="cen" style="width:56px">Cant.</th>
                     <th>Producto y enlace</th>
-                    <th class="der" style="width:92px">Costo u.</th>
+                    <th class="der" style="width:92px">Precio u.</th>
                     <th class="der" style="width:100px">Importe</th>
                   </tr>
                 </thead>
@@ -105,8 +105,8 @@ const tiendas = [...porTienda.entries()].sort((a, b) => b[1].length - a[1].lengt
                           </a>
                         )}
                       </td>
-                      <td class="der doc-num">{pesos(p.costo_centavos)}</td>
-                      <td class="der doc-num">{pesos(importe(p.cantidad, p.costo_centavos))}</td>
+                      <td class="der doc-num">{pesos(p.precio_centavos)}</td>
+                      <td class="der doc-num">{pesos(importe(p.cantidad, p.precio_centavos))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -119,8 +119,8 @@ const tiendas = [...porTienda.entries()].sort((a, b) => b[1].length - a[1].lengt
       <div class="doc-total">
         <table>
           <tr class="final">
-            <td>Costo total</td>
-            <td class="der">{pesos(t.costo)}</td>
+            <td>Total</td>
+            <td class="der">{pesos(t.precio)}</td>
           </tr>
         </table>
       </div>

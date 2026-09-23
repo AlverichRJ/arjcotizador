@@ -67,13 +67,18 @@ if (Astro.request.method === 'POST') {
       imagen = '';
     }
 
+    // El costo ya no se edita en pantalla, pero el dato sigue en la base y hay
+    // cotizaciones que lo tienen. Solo se toca si el formulario lo trae: si se
+    // escribiera sin más, cada guardado lo pondría en cero y se perdería.
+    const costo = k('costo');
+
     actualizarPartida(p.id, {
       descripcion: aTexto(k('descripcion')),
       marca: aTexto(k('marca')),
       unidad: aTexto(k('unidad')) || 'pza',
       cantidad: Math.max(0, aNumero(k('cantidad'), 1)),
       enlace: aTexto(k('enlace')),
-      costo_centavos: aCentavos(k('costo')),
+      ...(costo === null ? {} : { costo_centavos: aCentavos(costo) }),
       precio_centavos: aCentavos(k('precio')),
       imagen_origen: origen,
       imagen,
@@ -261,18 +266,6 @@ const t = totales(partidas);
                         data-cant
                       />
                     </label>
-                    <label class="campo interno">
-                      <span>Costo unitario</span>
-                      <input
-                        class="num"
-                        name={`p-${p.id}-costo`}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={aInput(p.costo_centavos)}
-                        data-costo
-                      />
-                    </label>
                     <label class="campo">
                       <span>Precio unitario</span>
                       <input
@@ -293,7 +286,6 @@ const t = totales(partidas);
                   <div class="importe" data-importe>
                     {pesos(importe(p.cantidad, p.precio_centavos))}
                   </div>
-                  <div class="margen-linea" data-margen-linea />
                 </div>
               </div>
 
@@ -335,19 +327,13 @@ const t = totales(partidas);
         <div class="totales">
           <div class="total-celda">
             <span class="etq">Partidas</span>
-            <b data-tot-partidas>{partidas.length}</b>
+            <b>{partidas.length}</b>
           </div>
-          <div class="total-celda interno">
-            <span class="etq">Tu costo</span>
-            <b data-tot-costo>{pesos(t.costo)}</b>
+          <div class="total-celda">
+            <span class="etq">Piezas</span>
+            <b data-tot-piezas>{t.piezas}</b>
           </div>
-          <div class="total-celda interno">
-            <span class="etq">Tu margen</span>
-            <b class={t.margen >= 0 ? 'bien' : 'mal'} data-tot-margen>
-              {pesos(t.margen)} <small data-tot-margen-pct>({t.margenPct.toFixed(1)}%)</small>
-            </b>
-          </div>
-          <div class="total-celda destacado">
+          <div class="total-celda destacado" style="grid-column:span 2">
             <span class="etq">Total al cliente</span>
             <b data-tot-precio>{pesos(t.precio)}</b>
           </div>
@@ -390,43 +376,26 @@ const t = totales(partidas);
   const mx = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
   const form = document.getElementById('f');
 
-  /** Recalcula importes, totales y márgenes sin ir al servidor. */
+  /** Recalcula importes y total sin ir al servidor. */
   function recalcular() {
-    let costo = 0;
     let precio = 0;
+    let piezas = 0;
     document.querySelectorAll('[data-partida]').forEach((fila) => {
       const cant = parseFloat(fila.querySelector('[data-cant]').value) || 0;
-      const c = Math.round((parseFloat(fila.querySelector('[data-costo]').value) || 0) * 100);
       const p = Math.round((parseFloat(fila.querySelector('[data-precio]').value) || 0) * 100);
-      const impC = Math.round(cant * c);
-      const impP = Math.round(cant * p);
-      costo += impC;
-      precio += impP;
-
-      fila.querySelector('[data-importe]').textContent = mx.format(impP / 100);
-      const m = fila.querySelector('[data-margen-linea]');
-      if (c > 0 || p > 0) {
-        const dif = impP - impC;
-        const pct = impP > 0 ? (dif / impP) * 100 : 0;
-        m.textContent = `margen ${mx.format(dif / 100)} · ${pct.toFixed(0)}%`;
-        m.className = 'margen-linea ' + (dif >= 0 ? 'bien' : 'mal');
-      } else {
-        m.textContent = '';
-      }
+      const imp = Math.round(cant * p);
+      precio += imp;
+      piezas += cant;
+      fila.querySelector('[data-importe]').textContent = mx.format(imp / 100);
     });
-
-    const margen = precio - costo;
-    document.querySelector('[data-tot-costo]').textContent = mx.format(costo / 100);
     document.querySelector('[data-tot-precio]').textContent = mx.format(precio / 100);
-    const tm = document.querySelector('[data-tot-margen]');
-    tm.firstChild.nodeValue = mx.format(margen / 100) + ' ';
-    tm.className = margen >= 0 ? 'bien' : 'mal';
-    document.querySelector('[data-tot-margen-pct]').textContent =
-      '(' + (precio > 0 ? ((margen / precio) * 100).toFixed(1) : '0.0') + '%)';
+    document.querySelector('[data-tot-piezas]').textContent = String(
+      Number.isInteger(piezas) ? piezas : piezas.toFixed(2),
+    );
   }
 
   form?.addEventListener('input', (e) => {
-    if (e.target.matches('[data-cant],[data-costo],[data-precio]')) recalcular();
+    if (e.target.matches('[data-cant],[data-precio]')) recalcular();
   });
   recalcular();
 
