@@ -11,7 +11,7 @@ import {
   duplicarCotizacion,
 } from '../../db/index';
 import { guardarImagen } from '../../lib/enlace';
-import { pesos, aInput, aCentavos, aNumero, aTexto, importe, totales } from '../../lib/dinero';
+import { pesos, aCentavos, aNumero, aTexto, importe, totales, desglosarIva } from '../../lib/dinero';
 import { ESTADOS } from '../../datos/empresa';
 
 export const prerender = false;
@@ -39,6 +39,7 @@ if (Astro.request.method === 'POST') {
     proyecto: aTexto(f.get('proyecto')),
     orden_compra: aTexto(f.get('orden_compra')),
     vigencia_dias: Math.max(1, Math.round(aNumero(f.get('vigencia_dias'), 15))),
+    iva_pct: Math.min(100, Math.max(0, Math.round(aNumero(f.get('iva_pct'), 16)))),
     notas: aTexto(f.get('notas')),
     condiciones: aTexto(f.get('condiciones')),
   });
@@ -181,6 +182,10 @@ const t = totales(partidas);
           <label class="campo">
             <span>Vigencia (días)</span>
             <input class="num" name="vigencia_dias" type="number" min="1" value={cot.vigencia_dias} />
+          </label>
+          <label class="campo">
+            <span>IVA % (incluido en los precios)</span>
+            <input class="num" name="iva_pct" type="number" min="0" max="100" value={cot.iva_pct} />
           </label>
         </div>
       </div>
@@ -333,7 +338,11 @@ const t = totales(partidas);
             <span class="etq">Piezas</span>
             <b data-tot-piezas>{t.piezas}</b>
           </div>
-          <div class="total-celda destacado" style="grid-column:span 2">
+          <div class="total-celda">
+            <span class="etq">IVA {cot.iva_pct}% incluido</span>
+            <b data-tot-iva>{pesos(desglosarIva(t.precio, cot.iva_pct).iva)}</b>
+          </div>
+          <div class="total-celda destacado">
             <span class="etq">Total al cliente</span>
             <b data-tot-precio>{pesos(t.precio)}</b>
           </div>

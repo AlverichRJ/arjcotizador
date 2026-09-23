@@ -77,6 +77,24 @@ export function totales(
   };
 }
 
+/**
+ * Desglosa el IVA de un total que YA lo lleva dentro.
+ *
+ * Es la operación correcta aquí y no es la obvia: los precios de SYSCOM vienen
+ * con IVA incluido, así que sumarle 16% encima sería cobrarlo dos veces. Lo que
+ * se hace es separar qué parte de ese total es impuesto:
+ *
+ *     sin IVA = total / 1.16        IVA = total − sin IVA
+ *
+ * Verificado contra los documentos de Badabun: 37,032.52 / 1.16 = 31,924.59,
+ * y la diferencia son los 5,107.93 que imprime su sistema.
+ */
+export function desglosarIva(totalCentavos: number, pct: number) {
+  if (!pct || pct <= 0) return { sinIva: totalCentavos, iva: 0, total: totalCentavos };
+  const sinIva = Math.round(totalCentavos / (1 + pct / 100));
+  return { sinIva, iva: totalCentavos - sinIva, total: totalCentavos };
+}
+
 export function fechaLarga(iso: string): string {
   const [a, m, d] = iso.slice(0, 10).split('-').map(Number);
   return new Date(a, m - 1, d).toLocaleDateString('es-MX', {

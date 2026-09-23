@@ -1,7 +1,7 @@
 ---
 import App from '../../../layouts/App.astro';
 import { obtenerCotizacion, partidasDe } from '../../../db/index';
-import { pesos, importe, totales, fechaLarga, sumarDias } from '../../../lib/dinero';
+import { pesos, importe, totales, fechaLarga, sumarDias, desglosarIva } from '../../../lib/dinero';
 import { empresa } from '../../../datos/empresa';
 
 export const prerender = false;
@@ -13,6 +13,8 @@ if (!cot) return new Response('No existe esa cotización', { status: 404 });
 const partidas = partidasDe(id);
 const t = totales(partidas);
 const vence = sumarDias(cot.fecha, cot.vigencia_dias);
+// Los precios YA llevan el IVA dentro: esto lo separa, no lo suma encima.
+const iva = desglosarIva(t.precio, cot.iva_pct);
 const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
 ---
 
@@ -114,8 +116,22 @@ const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
 
       <div class="doc-total">
         <table>
+          {
+            iva.iva > 0 && (
+              <Fragment>
+                <tr>
+                  <td>Subtotal</td>
+                  <td class="der">{pesos(iva.sinIva)}</td>
+                </tr>
+                <tr>
+                  <td>IVA {cot.iva_pct}% incluido</td>
+                  <td class="der">{pesos(iva.iva)}</td>
+                </tr>
+              </Fragment>
+            )
+          }
           <tr class="final">
-            <td>Total</td>
+            <td>Total MXN</td>
             <td class="der">{pesos(t.precio)}</td>
           </tr>
         </table>

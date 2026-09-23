@@ -35,6 +35,20 @@ function leerEsquema(): string {
 
 db.exec(leerEsquema());
 
+/**
+ * Migraciones pequeñas. El esquema se crea con CREATE TABLE IF NOT EXISTS, que
+ * no toca las tablas que ya existen: las columnas nuevas hay que añadirlas
+ * aquí o las bases ya creadas se quedan sin ellas.
+ */
+function columnas(tabla: string): Set<string> {
+  return new Set(
+    (db.prepare(`PRAGMA table_info(${tabla})`).all() as Array<{ name: string }>).map((c) => c.name),
+  );
+}
+if (!columnas('cotizaciones').has('iva_pct')) {
+  db.exec('ALTER TABLE cotizaciones ADD COLUMN iva_pct INTEGER NOT NULL DEFAULT 16');
+}
+
 export interface Cotizacion {
   id: number;
   folio: string;
@@ -50,6 +64,7 @@ export interface Cotizacion {
   proyecto: string;
   orden_compra: string;
   vigencia_dias: number;
+  iva_pct: number;
   notas: string;
   condiciones: string;
   creada_en: string;
@@ -134,6 +149,7 @@ export function actualizarCotizacion(id: number, campos: Partial<Cotizacion>): v
     'proyecto',
     'orden_compra',
     'vigencia_dias',
+    'iva_pct',
     'notas',
     'condiciones',
   ] as const;
