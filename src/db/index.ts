@@ -48,6 +48,11 @@ function columnas(tabla: string): Set<string> {
 if (!columnas('cotizaciones').has('iva_pct')) {
   db.exec('ALTER TABLE cotizaciones ADD COLUMN iva_pct INTEGER NOT NULL DEFAULT 16');
 }
+if (!columnas('cotizaciones').has('iva_modo')) {
+  // 'incluido' = los precios ya lo traen dentro (SYSCOM); 'sumado' = se añade
+  // al total. Las cotizaciones que ya existen se quedan como estaban.
+  db.exec("ALTER TABLE cotizaciones ADD COLUMN iva_modo TEXT NOT NULL DEFAULT 'incluido'");
+}
 
 export interface Cotizacion {
   id: number;
@@ -65,6 +70,7 @@ export interface Cotizacion {
   orden_compra: string;
   vigencia_dias: number;
   iva_pct: number;
+  iva_modo: string;
   notas: string;
   condiciones: string;
   creada_en: string;
@@ -150,6 +156,7 @@ export function actualizarCotizacion(id: number, campos: Partial<Cotizacion>): v
     'orden_compra',
     'vigencia_dias',
     'iva_pct',
+    'iva_modo',
     'notas',
     'condiciones',
   ] as const;

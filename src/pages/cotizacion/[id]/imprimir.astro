@@ -14,7 +14,7 @@ const partidas = partidasDe(id);
 const t = totales(partidas);
 const vence = sumarDias(cot.fecha, cot.vigencia_dias);
 // Los precios YA llevan el IVA dentro: esto lo separa, no lo suma encima.
-const iva = desglosarIva(t.precio, cot.iva_pct);
+const iva = desglosarIva(t.precio, cot.iva_pct, cot.iva_modo);
 const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
 ---
 
@@ -124,7 +124,7 @@ const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
                   <td class="der">{pesos(iva.sinIva)}</td>
                 </tr>
                 <tr>
-                  <td>IVA {cot.iva_pct}% incluido</td>
+                  <td>IVA {cot.iva_pct}% {cot.iva_modo === 'sumado' ? '' : 'incluido'}</td>
                   <td class="der">{pesos(iva.iva)}</td>
                 </tr>
               </Fragment>
@@ -132,7 +132,7 @@ const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
           }
           <tr class="final">
             <td>Total MXN</td>
-            <td class="der">{pesos(t.precio)}</td>
+            <td class="der">{pesos(iva.total)}</td>
           </tr>
         </table>
       </div>

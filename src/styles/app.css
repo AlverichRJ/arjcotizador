@@ -187,6 +187,23 @@ input.num { font-family: var(--f-mono); text-align: right; }
 
 /* --- totales ------------------------------------------------------------- */
 
+/* El control del IVA vive JUNTO a los totales, que es donde se busca. Estuvo
+   un rato entre los datos del cliente y ahí no lo encuentra nadie. */
+.iva-control {
+  display: grid;
+  grid-template-columns: 220px 120px 1fr;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-2);
+}
+.iva-nota { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+@media (max-width: 900px) {
+  .iva-control { grid-template-columns: 1fr 1fr; }
+  .iva-nota { grid-column: span 2; }
+}
+
 .totales { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
 .total-celda { background: var(--bg); padding: 14px 16px; }
 .total-celda .etq { display: block; margin-bottom: 5px; }

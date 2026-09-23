@@ -89,10 +89,18 @@ export function totales(
  * Verificado contra los documentos de Badabun: 37,032.52 / 1.16 = 31,924.59,
  * y la diferencia son los 5,107.93 que imprime su sistema.
  */
-export function desglosarIva(totalCentavos: number, pct: number) {
-  if (!pct || pct <= 0) return { sinIva: totalCentavos, iva: 0, total: totalCentavos };
-  const sinIva = Math.round(totalCentavos / (1 + pct / 100));
-  return { sinIva, iva: totalCentavos - sinIva, total: totalCentavos };
+export function desglosarIva(sumaPartidas: number, pct: number, modo = 'incluido') {
+  if (!pct || pct <= 0) return { sinIva: sumaPartidas, iva: 0, total: sumaPartidas };
+
+  if (modo === 'sumado') {
+    // Los precios NO llevan IVA: se añade al total.
+    const iva = Math.round((sumaPartidas * pct) / 100);
+    return { sinIva: sumaPartidas, iva, total: sumaPartidas + iva };
+  }
+
+  // Los precios ya lo traen dentro: se separa cuánto de ese total es impuesto.
+  const sinIva = Math.round(sumaPartidas / (1 + pct / 100));
+  return { sinIva, iva: sumaPartidas - sinIva, total: sumaPartidas };
 }
 
 export function fechaLarga(iso: string): string {

@@ -40,6 +40,7 @@ if (Astro.request.method === 'POST') {
     orden_compra: aTexto(f.get('orden_compra')),
     vigencia_dias: Math.max(1, Math.round(aNumero(f.get('vigencia_dias'), 15))),
     iva_pct: Math.min(100, Math.max(0, Math.round(aNumero(f.get('iva_pct'), 16)))),
+    iva_modo: aTexto(f.get('iva_modo')) === 'sumado' ? 'sumado' : 'incluido',
     notas: aTexto(f.get('notas')),
     condiciones: aTexto(f.get('condiciones')),
   });
@@ -183,10 +184,6 @@ const t = totales(partidas);
             <span>Vigencia (días)</span>
             <input class="num" name="vigencia_dias" type="number" min="1" value={cot.vigencia_dias} />
           </label>
-          <label class="campo">
-            <span>IVA % (incluido en los precios)</span>
-            <input class="num" name="iva_pct" type="number" min="0" max="100" value={cot.iva_pct} />
-          </label>
         </div>
       </div>
 
@@ -329,6 +326,38 @@ const t = totales(partidas);
 
       <div class="caja">
         <h2>Totales</h2>
+
+        <div class="iva-control">
+          <label class="campo">
+            <span>IVA</span>
+            <select name="iva_modo">
+              <option value="incluido" selected={cot.iva_modo !== 'sumado'}>
+                Ya incluido en los precios
+              </option>
+              <option value="sumado" selected={cot.iva_modo === 'sumado'}>
+                Sumarlo al total
+              </option>
+            </select>
+          </label>
+          <label class="campo">
+            <span>Porcentaje</span>
+            <input
+              class="num"
+              name="iva_pct"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={cot.iva_pct}
+            />
+          </label>
+          <p class="iva-nota">
+            Los precios de SYSCOM vienen <b>con IVA incluido</b>: con esa opción
+            el documento separa cuánto del total es impuesto. Pon
+            <b>0</b> para quitar el desglose.
+          </p>
+        </div>
+
         <div class="totales">
           <div class="total-celda">
             <span class="etq">Partidas</span>
@@ -339,12 +368,14 @@ const t = totales(partidas);
             <b data-tot-piezas>{t.piezas}</b>
           </div>
           <div class="total-celda">
-            <span class="etq">IVA {cot.iva_pct}% incluido</span>
-            <b data-tot-iva>{pesos(desglosarIva(t.precio, cot.iva_pct).iva)}</b>
+            <span class="etq" data-etq-iva>
+              IVA {cot.iva_pct}% {cot.iva_modo === 'sumado' ? 'sumado' : 'incluido'}
+            </span>
+            <b data-tot-iva>{pesos(desglosarIva(t.precio, cot.iva_pct, cot.iva_modo).iva)}</b>
           </div>
           <div class="total-celda destacado">
             <span class="etq">Total al cliente</span>
-            <b data-tot-precio>{pesos(t.precio)}</b>
+            <b data-tot-precio>{pesos(desglosarIva(t.precio, cot.iva_pct, cot.iva_modo).total)}</b>
           </div>
         </div>
       </div>
@@ -385,26 +416,47 @@ const t = totales(partidas);
   const mx = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
   const form = document.getElementById('f');
 
-  /** Recalcula importes y total sin ir al servidor. */
+  /** Recalcula importes, IVA y total sin ir al servidor. */
   function recalcular() {
-    let precio = 0;
+    let suma = 0;
     let piezas = 0;
     document.querySelectorAll('[data-partida]').forEach((fila) => {
       const cant = parseFloat(fila.querySelector('[data-cant]').value) || 0;
       const p = Math.round((parseFloat(fila.querySelector('[data-precio]').value) || 0) * 100);
       const imp = Math.round(cant * p);
-      precio += imp;
+      suma += imp;
       piezas += cant;
       fila.querySelector('[data-importe]').textContent = mx.format(imp / 100);
     });
-    document.querySelector('[data-tot-precio]').textContent = mx.format(precio / 100);
+
+    const pct = parseFloat(form.querySelector('[name="iva_pct"]').value) || 0;
+    const modo = form.querySelector('[name="iva_modo"]').value;
+
+    let iva = 0;
+    let total = suma;
+    if (pct > 0) {
+      if (modo === 'sumado') {
+        iva = Math.round((suma * pct) / 100);
+        total = suma + iva;
+      } else {
+        iva = suma - Math.round(suma / (1 + pct / 100));
+      }
+    }
+
+    document.querySelector('[data-tot-precio]').textContent = mx.format(total / 100);
+    document.querySelector('[data-tot-iva]').textContent = mx.format(iva / 100);
+    document.querySelector('[data-etq-iva]').textContent =
+      pct > 0 ? `IVA ${pct}% ${modo === 'sumado' ? 'sumado' : 'incluido'}` : 'Sin IVA';
     document.querySelector('[data-tot-piezas]').textContent = String(
       Number.isInteger(piezas) ? piezas : piezas.toFixed(2),
     );
   }
 
   form?.addEventListener('input', (e) => {
-    if (e.target.matches('[data-cant],[data-precio]')) recalcular();
+    if (e.target.matches('[data-cant],[data-precio],[name="iva_pct"]')) recalcular();
+  });
+  form?.addEventListener('change', (e) => {
+    if (e.target.matches('[name="iva_modo"]')) recalcular();
   });
   recalcular();
 
