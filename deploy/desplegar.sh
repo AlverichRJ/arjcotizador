@@ -43,4 +43,34 @@ systemctl is-active --quiet arjcotizador || {
   exit 1
 }
 
+echo "==> Comprobando que las páginas respondan"
+# No basta con que el proceso arranque: un error al renderizar deja el servicio
+# "activo" y la página se corta a media respuesta. Ya pasó — un import que
+# faltaba tumbó el editor mientras el despliegue decía "listo".
+DB="${DATOS_DIR:-/var/lib/arjcotizador}/cotizador.db"
+ULTIMA="$(sqlite3 "$DB" 'SELECT id FROM cotizaciones ORDER BY id DESC LIMIT 1' 2>/dev/null || true)"
+
+RUTAS="/"
+if [ -n "$ULTIMA" ]; then
+  RUTAS="$RUTAS /cotizacion/$ULTIMA /cotizacion/$ULTIMA/imprimir /cotizacion/$ULTIMA/compra"
+fi
+
+FALLOS=0
+for RUTA in $RUTAS; do
+  # --fail-with-body y -o /dev/null: interesa el código y que el cuerpo llegue
+  # entero; una respuesta cortada da error de curl aunque el código sea 200.
+  if CODIGO=$(curl -sS --fail --max-time 25 -o /dev/null -w '%{http_code}' \
+      "http://127.0.0.1:${PORT:-4322}${RUTA}" 2>/dev/null); then
+    echo "    ✓ ${RUTA} → ${CODIGO}"
+  else
+    echo "    ✗ ${RUTA} → respuesta incompleta o error" >&2
+    FALLOS=$((FALLOS + 1))
+  fi
+done
+
+if [ "$FALLOS" -gt 0 ]; then
+  echo "!! $FALLOS página(s) fallan. Mira: journalctl -u arjcotizador -n 40" >&2
+  exit 1
+fi
+
 echo "==> Listo. Comprueba EN LA URL: https://cotizador.alverichrj.tech"
