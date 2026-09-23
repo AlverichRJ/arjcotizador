@@ -49,10 +49,23 @@ if (Astro.request.method === 'POST') {
 
     const origen = aTexto(k('imagen_origen'));
     let imagen = p.imagen;
-    // Solo se descarga cuando la URL cambió: guardar no debe salir a internet
-    // por cada partida cada vez.
-    if (origen && origen !== p.imagen_origen) imagen = await guardarImagen(origen);
-    if (!origen) imagen = '';
+
+    // Imagen ya guardada que llega explícita (la sube el importador cuando la
+    // tienda le niega la descarga al servidor). Se valida el nombre: es un
+    // hash y una extensión, nada de rutas.
+    const explicita = aTexto(k('imagen'));
+    if (explicita && /^[0-9a-f]{8,40}\.(jpg|png|webp|gif|avif)$/.test(explicita)) {
+      imagen = explicita;
+    } else if (origen && origen !== p.imagen_origen) {
+      // Solo se descarga cuando la URL cambió: guardar no debe salir a
+      // internet por cada partida cada vez.
+      const bajada = await guardarImagen(origen);
+      // Si la descarga falla —403 de la tienda, por ejemplo— se conserva la
+      // foto que ya había en vez de borrarla.
+      if (bajada) imagen = bajada;
+    } else if (!origen) {
+      imagen = '';
+    }
 
     actualizarPartida(p.id, {
       descripcion: aTexto(k('descripcion')),

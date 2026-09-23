@@ -160,6 +160,25 @@ export async function leerEnlace(entrada: string): Promise<DatosEnlace> {
  * la mueva, cada cotización vieja queda con un hueco. Devuelve el nombre del
  * archivo guardado, que se sirve en /imagen/<archivo>.
  */
+/**
+ * Guarda unos bytes de imagen que llegan de fuera (los sube el importador o el
+ * navegador) y devuelve el nombre del archivo.
+ *
+ * Existe porque varias tiendas —SYSCOM entre ellas— responden 403 a las IPs de
+ * centros de datos: desde el VPS no se puede descargar su imagen, pero desde
+ * la computadora de Alberto sí. Así el cotizador no depende de que el servidor
+ * alcance la tienda.
+ */
+export function guardarBytes(buf: Buffer, tipoMime: string): string {
+  const ext = TIPOS[tipoMime.split(';')[0].trim().toLowerCase()];
+  if (!ext) return '';
+  if (buf.length === 0 || buf.length > LIMITE_IMAGEN) return '';
+  const nombre = `${createHash('sha1').update(buf).digest('hex').slice(0, 20)}.${ext}`;
+  const destino = join(DIR_IMAGENES, nombre);
+  if (!existsSync(destino)) writeFileSync(destino, buf);
+  return nombre;
+}
+
 export async function guardarImagen(entrada: string): Promise<string> {
   const u = urlPermitida(entrada);
   if (!u) return '';
