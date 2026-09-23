@@ -119,12 +119,17 @@ const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
           {
             iva.iva > 0 && (
               <Fragment>
+                {/* El subtotal es SIEMPRE la suma de la columna Importe. Si
+                    aquí se pusiera la base sin IVA, quien sume la columna a
+                    mano obtendría otro número y dudaría del documento. */}
                 <tr>
-                  <td>Subtotal</td>
-                  <td class="der">{pesos(iva.sinIva)}</td>
+                  <td>
+                    Subtotal{cot.iva_modo === 'sumado' ? '' : ' (IVA incluido)'}
+                  </td>
+                  <td class="der">{pesos(t.precio)}</td>
                 </tr>
                 <tr>
-                  <td>IVA {cot.iva_pct}% {cot.iva_modo === 'sumado' ? '' : 'incluido'}</td>
+                  <td>IVA {cot.iva_pct}%{cot.iva_modo === 'sumado' ? '' : ' incluido'}</td>
                   <td class="der">{pesos(iva.iva)}</td>
                 </tr>
               </Fragment>
