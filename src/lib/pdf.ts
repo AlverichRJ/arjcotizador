@@ -8,6 +8,9 @@
  * ni que se pueda desviar de la primera.
  */
 import { launch, type Browser } from 'puppeteer-core';
+import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /** Dónde está el navegador. En el VPS lo pone la unidad de systemd. */
 const CHROME =
@@ -24,6 +27,17 @@ const CHROME =
  * credenciales aquí, que es justo lo que no queremos guardar en el código.
  */
 const INTERNA = `http://127.0.0.1:${process.env.PORT ?? 4322}`;
+
+/**
+ * Dónde escribe Chrome sus cosas.
+ *
+ * La unidad lleva ProtectHome=true, así que /home/deploy no existe para este
+ * proceso: Chrome fallaba al arrancar intentando crear
+ * ~/.local/share/applications y la base de datos del gestor de caídas. Con
+ * PrivateTmp=true el /tmp del servicio es suyo y se vacía al reiniciar, que
+ * es exactamente lo que queremos para un perfil de usar y tirar.
+ */
+const PERFIL = join(tmpdir(), 'arjcotizador-chrome');
 
 /**
  * Una generación a la vez.
@@ -46,9 +60,15 @@ export function generarPdf(ruta: string): Promise<Uint8Array> {
   return enCola(async () => {
     let navegador: Browser | undefined;
     try {
+      mkdirSync(PERFIL, { recursive: true });
       navegador = await launch({
         executablePath: CHROME,
         headless: true,
+        userDataDir: PERFIL,
+        // HOME también, y no solo el perfil: Chrome escribe fuera del perfil
+        // —mimeapps.list, el gestor de caídas— y con el de verdad inaccesible
+        // se niega a arrancar.
+        env: { ...process.env, HOME: PERFIL },
         args: [
           // Sin sandbox porque la unidad lleva NoNewPrivileges=true, que impide
           // al sandbox SUID de Chrome tomar privilegios. Aquí no es un agujero:
@@ -59,6 +79,10 @@ export function generarPdf(ruta: string): Promise<Uint8Array> {
           // se cae a media carga. Con esto usa /tmp, que sí tiene sitio.
           '--disable-dev-shm-usage',
           '--disable-gpu',
+          '--disable-breakpad',
+          `--crash-dumps-dir=${PERFIL}`,
+          '--no-first-run',
+          '--no-default-browser-check',
         ],
       });
     } catch (e) {
