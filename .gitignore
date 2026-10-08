@@ -1,6 +1,12 @@
 node_modules/
 dist/
 .astro/
-datos/
+
+# Anclado a la raíz con la barra inicial. Sin ella, «datos/» también casaba con
+# src/datos/, y el archivo con los datos de la empresa se quedó fuera del
+# repositorio sin que nadie se diera cuenta: el VPS tenía una copia suelta de
+# la primera subida y el despliegue reventaba al añadir algo ahí.
+/datos/
+
 .env
 *.log
