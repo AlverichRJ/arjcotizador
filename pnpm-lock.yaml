@@ -23,13 +23,13 @@ importers:
       better-sqlite3:
         specifier: ^11.10.0
         version: 11.10.0
+      puppeteer-core:
+        specifier: ^25.11.0
+        version: 25.11.0
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.11
         version: 7.6.13
-      puppeteer-core:
-        specifier: ^25.11.0
-        version: 25.11.0
 
 packages:
 

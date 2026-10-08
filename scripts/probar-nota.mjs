@@ -167,6 +167,33 @@ const fA = (await leer(`/cotizacion/${rA.headers.get('location').split('/').pop(
 const fB = (await leer(`/cotizacion/${rB.headers.get('location').split('/').pop()}`)).match(/NS-\d{4}-\d{4}/)[0];
 ok(fA.startsWith('COT-') && fB.startsWith('NS-'), `cada una con su prefijo: ${fA} y ${fB}`);
 
+console.log('\n── descarga directa del PDF ──────────────────────');
+// Necesita un Chrome en el servidor. Si no lo hay, el endpoint responde 503
+// con un mensaje legible y el botón de imprimir sigue sirviendo: eso también
+// se comprueba, para que la prueba no mienta en una máquina sin navegador.
+for (const [quien, docId, prefijo] of [
+  ['nota', id, 'NS'],
+  ['cotización', cid, 'COT'],
+]) {
+  const r = await fetch(`${BASE}/cotizacion/${docId}/pdf`);
+  if (r.status === 503) {
+    ok(true, `${quien}: sin navegador en el servidor, responde 503 con aviso (no 500)`);
+    ok((await r.text()).includes('Imprimir'), '   y remite al botón de imprimir');
+    continue;
+  }
+  ok(r.status === 200, `${quien}: responde 200 (${r.status})`);
+  ok(r.headers.get('content-type') === 'application/pdf', '   con tipo application/pdf');
+  const cd = r.headers.get('content-disposition') ?? '';
+  ok(cd.startsWith('attachment;'), '   se descarga en vez de abrirse');
+  ok(cd.includes(`${prefijo}-`), `   con el folio en el nombre: ${cd.match(/filename="([^"]+)"/)?.[1]}`);
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  const cabecera = new TextDecoder().decode(bytes.slice(0, 5));
+  ok(cabecera === '%PDF-', `   y es un PDF de verdad (${bytes.length} bytes)`);
+}
+
+const rMal = await fetch(`${BASE}/cotizacion/999999/pdf`);
+ok(rMal.status === 404, `un documento que no existe da 404 (${rMal.status})`);
+
 console.log('\n── cada documento en su hoja ─────────────────────');
 const rDoc = await fetch(`${BASE}/cotizacion/${id}/imprimir`, { redirect: 'manual' });
 ok(rDoc.status === 303, `una nota pedida como cotización redirige (${rDoc.status})`);

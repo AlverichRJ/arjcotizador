@@ -20,6 +20,23 @@ install -d -o deploy -g deploy "$DIR_APP"
 install -d -o deploy -g deploy -m 750 "$DIR_DATOS"
 install -d -o deploy -g deploy -m 750 "$DIR_DATOS/imagenes"
 
+echo "==> Navegador para generar los PDF"
+# El botón «Descargar PDF» imprime la propia página del documento con un Chrome
+# sin pantalla. Se usa el .deb oficial de Google y no el snap de Ubuntu: el
+# snap vive aislado y un servicio con ProtectHome y PrivateTmp no consigue
+# arrancarlo. El .deb además arrastra sus propias bibliotecas y se actualiza
+# solo con el resto del sistema.
+if ! command -v google-chrome-stable >/dev/null; then
+  install -d -m 755 /etc/apt/keyrings
+  curl -fsSL https://dl.google.com/linux/linux_signing_key.pub |
+    gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
+    >/etc/apt/sources.list.d/google-chrome.list
+  apt-get update -qq
+  apt-get install -y -qq google-chrome-stable
+fi
+google-chrome-stable --version
+
 echo "==> Servicio"
 install -m 644 "$(dirname "$0")/arjcotizador.service" /etc/systemd/system/arjcotizador.service
 systemctl daemon-reload

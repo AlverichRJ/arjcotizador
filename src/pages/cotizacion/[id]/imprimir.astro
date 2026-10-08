@@ -26,13 +26,15 @@ const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
     <div class="barra no-imprimir">
       <a class="btn gris" href={`/cotizacion/${id}`}>Volver a editar</a>
       <span class="sep"></span>
-      <button class="btn" type="button" id="imprimir">Descargar PDF</button>
+      <button class="btn gris" type="button" id="imprimir">Imprimir</button>
+      <a class="btn" href={`/cotizacion/${id}/pdf`} data-pdf>Descargar PDF</a>
     </div>
 
     <p class="aviso no-imprimir">
-      Al pulsar «Descargar PDF» se abre el diálogo de impresión: elige
-      <b>«Guardar como PDF»</b> como destino. Lo que ves aquí es exactamente lo
-      que sale, y no incluye ni tus enlaces de compra ni tus costos.
+      <b>Descargar PDF</b> guarda el archivo directamente. <b>Imprimir</b> abre
+      el diálogo del navegador, por si quieres mandarlo a papel. Lo que ves aquí
+      es exactamente lo que sale, y no incluye ni tus enlaces de compra ni tus
+      costos.
     </p>
 
     <article class="hoja">
@@ -174,5 +176,6 @@ const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
 </App>
 
 <script>
-  document.getElementById('imprimir')?.addEventListener('click', () => window.print());
+  import { montarBarraDocumento } from '../../../scripts/descargar-pdf.js';
+  montarBarraDocumento();
 </script>

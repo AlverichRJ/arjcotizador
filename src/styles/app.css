@@ -216,7 +216,7 @@ input.num { font-family: var(--f-mono); text-align: right; }
   border-bottom: 1px solid var(--line-2);
 }
 .iva-nota { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
-@media (max-width: 900px) {
+@media screen and (max-width: 900px) {
   .iva-control { grid-template-columns: 1fr 1fr; }
   .iva-nota { grid-column: span 2; }
 }
@@ -367,7 +367,12 @@ table.doc.nota { margin-top: 10px; }
   a { color: var(--ink); text-decoration: none; }
 }
 
-@media (max-width: 900px) {
+/* «screen and» a propósito: una hoja carta mide unos 816 px de ancho, así que
+   sin eso el navegador aplicaba también al imprimir el diseño de pantalla
+   estrecha. El resultado era que en el PDF «Cliente» y «Servicio» se apilaban,
+   y las dos firmas salían una encima de otra desperdiciando media página. En
+   papel manda el bloque @media print, que es donde está pensado el documento. */
+@media screen and (max-width: 900px) {
   .rejilla.c4, .rejilla.c3, .rejilla.c2 { grid-template-columns: 1fr 1fr; }
   .partida-cifras, .partida-cifras.nota { grid-template-columns: 1fr 1fr; }
   .totales { grid-template-columns: 1fr 1fr; }
