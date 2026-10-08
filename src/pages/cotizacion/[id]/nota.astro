@@ -1,0 +1,281 @@
+---
+/**
+ * La NOTA DE SERVICIOS: el documento de lo que ya se trabajó y se cobró.
+ *
+ * Vive aparte de imprimir.astro a propósito. La cotización de producto lleva
+ * fotos, vigencia y precios unitarios; esta lleva el desglose de tareas, el
+ * importe con letra y las firmas. Meter las dos en una sola plantilla acabaría
+ * en un enredo de condicionales sobre el documento que más cuida el cliente.
+ */
+import App from '../../../layouts/App.astro';
+import { obtenerCotizacion, partidasDe } from '../../../db/index';
+import {
+  pesos,
+  importe,
+  totales,
+  fechaLarga,
+  desglosarIva,
+  sumaDocumento,
+  enLetras,
+} from '../../../lib/dinero';
+import { empresa } from '../../../datos/empresa';
+
+export const prerender = false;
+
+const id = Number(Astro.params.id);
+const cot = obtenerCotizacion(id);
+if (!cot) return new Response('No existe ese documento', { status: 404 });
+// Una cotización no se imprime como nota: su documento es el otro.
+if (cot.tipo !== 'nota') return Astro.redirect(`/cotizacion/${id}/imprimir`, 303);
+
+const partidas = partidasDe(id);
+const cerrado = cot.cobro_modo === 'cerrado';
+const suma = sumaDocumento(cot, partidas);
+const iva = desglosarIva(suma, cot.iva_pct, cot.iva_modo);
+const t = totales(partidas);
+const condiciones = cot.condiciones.split('\n').filter((l) => l.trim());
+/** Las tareas de un concepto: un renglón por línea, sin líneas vacías. */
+const tareas = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean);
+---
+
+<App titulo={`${cot.folio} — nota de servicios`}>
+  <div class="wrap">
+    <div class="barra no-imprimir">
+      <a class="btn gris" href={`/cotizacion/${id}`}>Volver a editar</a>
+      <span class="sep"></span>
+      <button class="btn" type="button" id="imprimir">Descargar PDF</button>
+    </div>
+
+    <p class="aviso no-imprimir">
+      Al pulsar «Descargar PDF» se abre el diálogo de impresión: elige
+      <b>«Guardar como PDF»</b> como destino. Lo que ves aquí es exactamente lo
+      que sale.
+    </p>
+
+    <article class="hoja">
+      <header class="doc-cabeza">
+        <div class="doc-marca">
+          <b>ARJ<em>·</em>Solutions</b>
+          <span>{empresa.bajada}</span>
+          <div class="datos">
+            {empresa.responsable}<br />
+            {empresa.telefono} · {empresa.correo}<br />
+            {empresa.ciudad} · {empresa.sitio}
+          </div>
+        </div>
+        <div class="doc-folio">
+          <div class="tipo">Nota de servicios</div>
+          <div class="num">{cot.folio}</div>
+          <div class="fechas">
+            Fecha: {fechaLarga(cot.fecha)}
+            {cot.orden_compra && (
+              <Fragment>
+                <br />
+                Referencia: {cot.orden_compra}
+              </Fragment>
+            )}
+            {cot.forma_pago && (
+              <Fragment>
+                <br />
+                Forma de pago: {cot.forma_pago}
+              </Fragment>
+            )}
+          </div>
+          {/* El sello de cobrado va donde se busca: junto al folio. */}
+          <div class={`doc-sello ${cot.pagado_en ? 'pagado' : 'pendiente'}`}>
+            {cot.pagado_en ? `Pagada el ${fechaLarga(cot.pagado_en)}` : 'Pendiente de pago'}
+          </div>
+        </div>
+      </header>
+
+      <section class="doc-partes">
+        <div>
+          <span class="etq">Cliente</span>
+          <div class="quien">
+            <b>{cot.cliente_empresa || cot.cliente_nombre || 'Por definir'}</b>
+            {cot.cliente_empresa && cot.cliente_nombre && (
+              <Fragment>{cot.cliente_nombre}<br /></Fragment>
+            )}
+            {cot.cliente_direccion && <Fragment>{cot.cliente_direccion}<br /></Fragment>}
+            {cot.cliente_telefono && <Fragment>{cot.cliente_telefono}<br /></Fragment>}
+            {cot.cliente_correo}
+          </div>
+        </div>
+        <div>
+          <span class="etq">Servicio</span>
+          <div class="quien">
+            <b>{cot.proyecto || '—'}</b>
+          </div>
+        </div>
+      </section>
+
+      <h2 class="doc-titulo">Trabajos realizados</h2>
+
+      {
+        partidas.length === 0 ? (
+          <p class="doc-aviso">Esta nota todavía no tiene conceptos.</p>
+        ) : (
+          <table class="doc nota">
+            <thead>
+              <tr>
+                <th style="width:34px">#</th>
+                <th>Concepto y tareas</th>
+                {!cerrado && (
+                  <Fragment>
+                    <th class="cen" style="width:64px">Cant.</th>
+                    <th class="der" style="width:110px">P. unitario</th>
+                    <th class="der" style="width:110px">Importe</th>
+                  </Fragment>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {partidas.map((p, i) => (
+                <tr>
+                  <td class="doc-num">{String(i + 1).padStart(2, '0')}</td>
+                  <td class="doc-desc">
+                    <b>{p.descripcion || 'Sin descripción'}</b>
+                    {tareas(p.detalle).length > 0 && (
+                      <ul class="doc-tareas">
+                        {tareas(p.detalle).map((tarea) => (
+                          <li>{tarea}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                  {!cerrado && (
+                    <Fragment>
+                      <td class="cen doc-num">
+                        {p.cantidad} {p.unidad}
+                      </td>
+                      <td class="der doc-num">{pesos(p.precio_centavos)}</td>
+                      <td class="der doc-num">
+                        {pesos(importe(p.cantidad, p.precio_centavos))}
+                      </td>
+                    </Fragment>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      }
+
+      {/* Con precio cerrado el importe no es la suma de nada: se enuncia solo,
+          grande, como en el desglose que firma el cliente. */}
+      {
+        cerrado ? (
+          <div class="doc-cerrado">
+            <span class="etq">Importe total del servicio</span>
+            <div class="cifra">{pesos(iva.total)}</div>
+            <div class="letra">{enLetras(iva.total)}</div>
+            {cot.iva_pct > 0 ? (
+              <p class="nota-iva">
+                Incluye IVA {cot.iva_pct}%
+                {cot.iva_modo === 'sumado' ? ' sumado' : ' incluido'}: {pesos(iva.iva)} sobre una
+                base de {pesos(iva.sinIva)}.
+              </p>
+            ) : (
+              <p class="nota-iva">
+                Importe total del servicio. No se desglosa IVA ni otros impuestos.
+              </p>
+            )}
+          </div>
+        ) : (
+          <Fragment>
+            {/* El <tbody> es explícito a propósito: con los renglones sueltos
+                dentro de <table>, anidados en este condicional, el compilador
+                cerraba la tabla antes del renglón del total y «Total MXN»
+                acababa fuera, sin estilo. Con tbody no hay ambigüedad.
+
+                Y, igual que en la cotización: el subtotal es SIEMPRE la suma de
+                la columna Importe. Poner aquí la base sin IVA haría que quien
+                sume la columna a mano obtenga otro número y dude del
+                documento. */}
+            <div class="doc-total">
+              <table>
+                <tbody>
+                  {iva.iva > 0 && (
+                    <tr>
+                      <td>Subtotal{cot.iva_modo === 'sumado' ? '' : ' (IVA incluido)'}</td>
+                      <td class="der">{pesos(t.precio)}</td>
+                    </tr>
+                  )}
+                  {iva.iva > 0 && (
+                    <tr>
+                      <td>IVA {cot.iva_pct}%{cot.iva_modo === 'sumado' ? '' : ' incluido'}</td>
+                      <td class="der">{pesos(iva.iva)}</td>
+                    </tr>
+                  )}
+                  <tr class="final">
+                    <td>Total MXN</td>
+                    <td class="der">{pesos(iva.total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="doc-letra-linea">
+              <span class="etq">Son</span>
+              {enLetras(iva.total)}
+            </p>
+          </Fragment>
+        )
+      }
+
+      {/* Con las firmas abajo, la columna derecha del pie se queda vacía: las
+          condiciones ocupan entonces el ancho completo en vez de dejar media
+          hoja en blanco. */}
+      <footer class={cot.firmas === 1 ? 'doc-pie ancho' : 'doc-pie'}>
+        <div>
+          {
+            condiciones.length > 0 && (
+              <Fragment>
+                <span class="etq">Condiciones</span>
+                <p>{condiciones.map((c) => `· ${c}`).join('\n')}</p>
+              </Fragment>
+            )
+          }
+          {
+            cot.notas && (
+              <Fragment>
+                <span class="etq" style="margin-top:14px">Notas</span>
+                <p>{cot.notas}</p>
+              </Fragment>
+            )
+          }
+        </div>
+        <div>
+          {
+            cot.firmas !== 1 && (
+              <Fragment>
+                <span class="etq">Atentamente</span>
+                <div class="doc-firma">{empresa.responsable}</div>
+              </Fragment>
+            )
+          }
+        </div>
+      </footer>
+
+      {
+        cot.firmas === 1 && (
+          <section class="doc-firmas">
+            <div>
+              <span class="etq">Responsable del servicio</span>
+              <div class="doc-firma">{empresa.responsable}</div>
+            </div>
+            <div>
+              <span class="etq">Firma de conformidad del cliente</span>
+              <div class="doc-firma">
+                {cot.cliente_nombre || cot.cliente_empresa || ' '}
+              </div>
+            </div>
+          </section>
+        )
+      }
+    </article>
+  </div>
+</App>
+
+<script>
+  document.getElementById('imprimir')?.addEventListener('click', () => window.print());
+</script>

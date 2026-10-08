@@ -7,9 +7,19 @@
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
+-- Una sola tabla para los dos documentos, distinguidos por `tipo`:
+--
+--   'cotizacion' → COT-año-0000, lo que se ofrece ANTES de trabajar.
+--   'nota'       → NS-año-0000, lo que se cobra DESPUÉS de trabajar.
+--
+-- Comparten cliente, folio, IVA, condiciones y hoja impresa, así que separarlos
+-- en dos tablas obligaría a mantener dos veces lo mismo. Cada tipo lleva su
+-- propio consecutivo: una nota y una cotización no pueden compartir número o
+-- la contabilidad no cuadra.
 CREATE TABLE IF NOT EXISTS cotizaciones (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   folio           TEXT    NOT NULL UNIQUE,
+  tipo            TEXT    NOT NULL DEFAULT 'cotizacion',
   anio            INTEGER NOT NULL,
   consecutivo     INTEGER NOT NULL,
   fecha           TEXT    NOT NULL,
@@ -31,8 +41,9 @@ CREATE TABLE IF NOT EXISTS cotizaciones (
   actualizada_en  TEXT    NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cot_anio_consec
-  ON cotizaciones (anio, consecutivo);
+-- El índice único va en las migraciones, no aquí: necesita la columna `tipo`,
+-- que en las bases que ya existían se añade con un ALTER TABLE después de
+-- ejecutar este archivo.
 
 CREATE TABLE IF NOT EXISTS partidas (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,6 +54,11 @@ CREATE TABLE IF NOT EXISTS partidas (
   marca           TEXT    NOT NULL DEFAULT '',
   unidad          TEXT    NOT NULL DEFAULT 'pza',
   cantidad        REAL    NOT NULL DEFAULT 1,
+
+  -- Solo lo usan las notas de servicio: el desglose de tareas que va debajo
+  -- del concepto, un renglón por línea. En una cotización de producto queda
+  -- vacío.
+  detalle         TEXT    NOT NULL DEFAULT '',
 
   -- INTERNO: no sale nunca en el PDF del cliente.
   enlace          TEXT    NOT NULL DEFAULT '',

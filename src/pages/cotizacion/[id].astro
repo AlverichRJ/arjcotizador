@@ -11,8 +11,19 @@ import {
   duplicarCotizacion,
 } from '../../db/index';
 import { guardarImagen } from '../../lib/enlace';
-import { pesos, aInput, aCentavos, aNumero, aTexto, importe, totales, desglosarIva } from '../../lib/dinero';
-import { ESTADOS } from '../../datos/empresa';
+import {
+  pesos,
+  aInput,
+  aCentavos,
+  aNumero,
+  aTexto,
+  importe,
+  totales,
+  desglosarIva,
+  sumaDocumento,
+  enLetras,
+} from '../../lib/dinero';
+import { ESTADOS, ESTADOS_NOTA, FORMAS_PAGO } from '../../datos/empresa';
 
 export const prerender = false;
 
@@ -20,76 +31,127 @@ const id = Number(Astro.params.id);
 if (!Number.isInteger(id)) return Astro.redirect('/', 303);
 
 let cot = obtenerCotizacion(id);
-if (!cot) return new Response('No existe esa cotización', { status: 404 });
+if (!cot) return new Response('No existe ese documento', { status: 404 });
+
+// El tipo manda sobre toda la página y NO se lee del formulario: un folio
+// COT no puede convertirse en NS a media edición, se duplica como nota.
+const esNota = cot.tipo === 'nota';
+const estadosValidos: readonly string[] = esNota ? ESTADOS_NOTA : ESTADOS;
 
 if (Astro.request.method === 'POST') {
   const f = await Astro.request.formData();
   const accion = aTexto(f.get('accion'));
 
+  /**
+   * Un campo que el formulario NO trae se deja como estaba.
+   *
+   * No es paranoia: media pantalla cambia según el tipo de documento y el modo
+   * de cobro, así que ningún guardado ve todos los campos. Escribiéndolos a
+   * ciegas, abrir una nota y pulsar «Guardar» vaciaba los datos del cliente
+   * sin decir nada. `actualizarCotizacion` ignora lo que llegue undefined.
+   */
+  const siViene = <T,>(campo: string, conv: (v: FormDataEntryValue) => T): T | undefined => {
+    const v = f.get(campo);
+    return v === null ? undefined : conv(v);
+  };
+
   // Siempre se guarda antes de cualquier otra acción: así nadie pierde lo que
   // acababa de teclear por pulsar "agregar partida".
   actualizarCotizacion(id, {
     fecha: aTexto(f.get('fecha')) || cot.fecha,
-    estado: aTexto(f.get('estado')) || cot.estado,
-    cliente_nombre: aTexto(f.get('cliente_nombre')),
-    cliente_empresa: aTexto(f.get('cliente_empresa')),
-    cliente_correo: aTexto(f.get('cliente_correo')),
-    cliente_telefono: aTexto(f.get('cliente_telefono')),
-    cliente_direccion: aTexto(f.get('cliente_direccion')),
-    proyecto: aTexto(f.get('proyecto')),
-    orden_compra: aTexto(f.get('orden_compra')),
-    vigencia_dias: Math.max(1, Math.round(aNumero(f.get('vigencia_dias'), 15))),
-    iva_pct: Math.min(100, Math.max(0, Math.round(aNumero(f.get('iva_pct'), 16)))),
-    iva_modo: aTexto(f.get('iva_modo')) === 'sumado' ? 'sumado' : 'incluido',
-    notas: aTexto(f.get('notas')),
-    condiciones: aTexto(f.get('condiciones')),
+    estado: siViene('estado', (v) => {
+      const e = aTexto(v);
+      return estadosValidos.includes(e) ? e : cot!.estado;
+    }),
+    cliente_nombre: siViene('cliente_nombre', aTexto),
+    cliente_empresa: siViene('cliente_empresa', aTexto),
+    cliente_correo: siViene('cliente_correo', aTexto),
+    cliente_telefono: siViene('cliente_telefono', aTexto),
+    cliente_direccion: siViene('cliente_direccion', aTexto),
+    proyecto: siViene('proyecto', aTexto),
+    orden_compra: siViene('orden_compra', aTexto),
+    vigencia_dias: siViene('vigencia_dias', (v) => Math.max(1, Math.round(aNumero(v, 15)))),
+    iva_pct: siViene('iva_pct', (v) => Math.min(100, Math.max(0, Math.round(aNumero(v, 16))))),
+    iva_modo: siViene('iva_modo', (v) => (aTexto(v) === 'sumado' ? 'sumado' : 'incluido')),
+    notas: siViene('notas', aTexto),
+    condiciones: siViene('condiciones', aTexto),
+    // Lo de la nota solo se escribe si esto ES una nota: el tipo lo decide el
+    // servidor, no el formulario.
+    ...(esNota
+      ? {
+          cobro_modo: siViene('cobro_modo', (v) =>
+            aTexto(v) === 'cerrado' ? 'cerrado' : 'por_concepto',
+          ),
+          importe_cerrado_centavos: siViene('importe_cerrado', aCentavos),
+          forma_pago: siViene('forma_pago', aTexto),
+          pagado_en: siViene('pagado_en', aTexto),
+          // Una casilla sin marcar no se envía, así que su ausencia no se puede
+          // distinguir de un POST parcial. Se ancla con un campo oculto que
+          // siempre viaja: si está, la casilla manda; si no, no se toca.
+          firmas: f.has('firmas_presente') ? (f.has('firmas') ? 1 : 0) : undefined,
+        }
+      : {}),
   });
 
   for (const p of partidasDe(id)) {
     const k = (campo: string) => f.get(`p-${p.id}-${campo}`);
     if (k('descripcion') === null) continue; // la partida no venía en el formulario
 
-    const origen = aTexto(k('imagen_origen'));
-    let imagen = p.imagen;
-
-    // Imagen ya guardada que llega explícita (la sube el importador cuando la
-    // tienda le niega la descarga al servidor). Se valida el nombre: es un
-    // hash y una extensión, nada de rutas.
-    const explicita = aTexto(k('imagen'));
-    if (explicita && /^[0-9a-f]{8,40}\.(jpg|png|webp|gif|avif)$/.test(explicita)) {
-      imagen = explicita;
-    } else if (origen && origen !== p.imagen_origen) {
-      // Solo se descarga cuando la URL cambió: guardar no debe salir a
-      // internet por cada partida cada vez.
-      const bajada = await guardarImagen(origen);
-      // Si la descarga falla —403 de la tienda, por ejemplo— se conserva la
-      // foto que ya había en vez de borrarla.
-      if (bajada) imagen = bajada;
-    } else if (!origen) {
-      imagen = '';
-    }
-
-    // El costo ya no se edita en pantalla, pero el dato sigue en la base y hay
-    // cotizaciones que lo tienen. Solo se toca si el formulario lo trae: si se
-    // escribiera sin más, cada guardado lo pondría en cero y se perdería.
+    // Varios campos solo se pintan en uno de los dos documentos, o según el
+    // modo de cobro. Cada uno se toca únicamente si el formulario lo trae: si
+    // se escribieran sin más, cada guardado los dejaría vacíos o en cero.
+    const cantidad = k('cantidad');
+    const precio = k('precio');
     const costo = k('costo');
+    const marca = k('marca');
+    const unidad = k('unidad');
+    const detalle = k('detalle');
+    const origenCampo = k('imagen_origen');
+
+    let foto: { imagen: string; imagen_origen: string } | undefined;
+    if (origenCampo !== null) {
+      const origen = aTexto(origenCampo);
+      let imagen = p.imagen;
+
+      // Imagen ya guardada que llega explícita (la sube el importador cuando la
+      // tienda le niega la descarga al servidor). Se valida el nombre: es un
+      // hash y una extensión, nada de rutas.
+      const explicita = aTexto(k('imagen'));
+      if (explicita && /^[0-9a-f]{8,40}\.(jpg|png|webp|gif|avif)$/.test(explicita)) {
+        imagen = explicita;
+      } else if (origen && origen !== p.imagen_origen) {
+        // Solo se descarga cuando la URL cambió: guardar no debe salir a
+        // internet por cada partida cada vez.
+        const bajada = await guardarImagen(origen);
+        // Si la descarga falla —403 de la tienda, por ejemplo— se conserva la
+        // foto que ya había en vez de borrarla.
+        if (bajada) imagen = bajada;
+      } else if (!origen) {
+        imagen = '';
+      }
+      foto = { imagen, imagen_origen: origen };
+    }
 
     actualizarPartida(p.id, {
       descripcion: aTexto(k('descripcion')),
-      marca: aTexto(k('marca')),
-      unidad: aTexto(k('unidad')) || 'pza',
-      cantidad: Math.max(0, aNumero(k('cantidad'), 1)),
-      enlace: aTexto(k('enlace')),
+      ...(marca === null ? {} : { marca: aTexto(marca) }),
+      ...(unidad === null ? {} : { unidad: aTexto(unidad) || 'pza' }),
+      ...(cantidad === null ? {} : { cantidad: Math.max(0, aNumero(cantidad, 1)) }),
+      ...(detalle === null ? {} : { detalle: aTexto(detalle) }),
+      ...(k('enlace') === null ? {} : { enlace: aTexto(k('enlace')) }),
       ...(costo === null ? {} : { costo_centavos: aCentavos(costo) }),
-      precio_centavos: aCentavos(k('precio')),
-      imagen_origen: origen,
-      imagen,
+      ...(precio === null ? {} : { precio_centavos: aCentavos(precio) }),
+      ...foto,
     });
   }
 
   if (accion === 'agregar') agregarPartida(id);
   else if (accion === 'duplicar') return Astro.redirect(`/cotizacion/${duplicarCotizacion(id)}`, 303);
-  else if (accion === 'borrar') {
+  else if (accion === 'a-nota') {
+    // Terminado el trabajo: la cotización aceptada se convierte en la nota de
+    // lo cobrado sin volver a teclear nada.
+    return Astro.redirect(`/cotizacion/${duplicarCotizacion(id, 'nota')}`, 303);
+  } else if (accion === 'borrar') {
     borrarCotizacion(id);
     return Astro.redirect('/', 303);
   } else if (accion.startsWith('eliminar:')) borrarPartida(Number(accion.slice(9)));
@@ -110,22 +172,29 @@ if (Astro.request.method === 'POST') {
 cot = obtenerCotizacion(id)!;
 const partidas = partidasDe(id);
 const t = totales(partidas);
+const cerrado = esNota && cot.cobro_modo === 'cerrado';
+const suma = sumaDocumento(cot, partidas);
+const iva = desglosarIva(suma, cot.iva_pct, cot.iva_modo);
+const rutaDoc = esNota ? `/cotizacion/${id}/nota` : `/cotizacion/${id}/imprimir`;
 ---
 
 <App titulo={cot.folio}>
   <div class="wrap">
     <div class="barra">
       <h1>{cot.folio}</h1>
+      <span class="serie">{esNota ? 'Nota de servicios' : 'Cotización'}</span>
       <span class={`estado ${cot.estado}`}>{cot.estado}</span>
       <span class="sep"></span>
       <a class="btn gris" href="/">Volver</a>
-      <a class="btn gris" href={`/cotizacion/${id}/compra`}>Lista de compra</a>
-      <a class="btn" href={`/cotizacion/${id}/imprimir`}>Ver e imprimir PDF</a>
+      {!esNota && <a class="btn gris" href={`/cotizacion/${id}/compra`}>Lista de compra</a>}
+      <a class="btn" href={rutaDoc}>
+        {esNota ? 'Ver e imprimir nota' : 'Ver e imprimir PDF'}
+      </a>
     </div>
 
-    <form method="POST" id="f">
+    <form method="POST" id="f" data-cerrado={cerrado ? '1' : '0'}>
       <div class="caja">
-        <h2>Cliente y proyecto</h2>
+        <h2>Cliente y {esNota ? 'servicio' : 'proyecto'}</h2>
         <div class="rejilla c2">
           <label class="campo">
             <span>Empresa</span>
@@ -146,28 +215,32 @@ const t = totales(partidas);
         </div>
         <div class="rejilla" style="margin-top:12px">
           <label class="campo">
-            <span>Dirección o sitio de la obra</span>
+            <span>Dirección o sitio {esNota ? 'donde se prestó el servicio' : 'de la obra'}</span>
             <input name="cliente_direccion" value={cot.cliente_direccion} autocomplete="off" />
           </label>
         </div>
         <div class="rejilla c4" style="margin-top:12px">
           <label class="campo" style="grid-column:span 2">
-            <span>Proyecto</span>
+            <span>{esNota ? 'Servicio prestado' : 'Proyecto'}</span>
             <input
               name="proyecto"
               value={cot.proyecto}
-              placeholder="Red y CCTV para bodega"
+              placeholder={
+                esNota
+                  ? 'Configuración y puesta en marcha de acceso remoto'
+                  : 'Red y CCTV para bodega'
+              }
               autocomplete="off"
             />
           </label>
           <label class="campo">
-            <span>Orden de compra del cliente</span>
+            <span>{esNota ? 'Orden de compra o referencia' : 'Orden de compra del cliente'}</span>
             <input name="orden_compra" value={cot.orden_compra} autocomplete="off" />
           </label>
           <label class="campo">
             <span>Estado</span>
             <select name="estado">
-              {ESTADOS.map((e) => (
+              {estadosValidos.map((e) => (
                 <option value={e} selected={e === cot.estado}>
                   {e}
                 </option>
@@ -177,24 +250,51 @@ const t = totales(partidas);
         </div>
         <div class="rejilla c4" style="margin-top:12px">
           <label class="campo">
-            <span>Fecha</span>
+            <span>{esNota ? 'Fecha del servicio' : 'Fecha'}</span>
             <input name="fecha" type="date" value={cot.fecha} />
           </label>
-          <label class="campo">
-            <span>Vigencia (días)</span>
-            <input class="num" name="vigencia_dias" type="number" min="1" value={cot.vigencia_dias} />
-          </label>
+          {
+            esNota ? (
+              <Fragment>
+                <label class="campo">
+                  <span>Forma de pago</span>
+                  <input
+                    name="forma_pago"
+                    value={cot.forma_pago}
+                    list="formas-pago"
+                    placeholder="Transferencia bancaria"
+                    autocomplete="off"
+                  />
+                  <datalist id="formas-pago">
+                    {FORMAS_PAGO.map((fp) => (
+                      <option value={fp} />
+                    ))}
+                  </datalist>
+                </label>
+                <label class="campo">
+                  <span>Pagado el (vacío = pendiente)</span>
+                  <input name="pagado_en" type="date" value={cot.pagado_en} />
+                </label>
+              </Fragment>
+            ) : (
+              <label class="campo">
+                <span>Vigencia (días)</span>
+                <input class="num" name="vigencia_dias" type="number" min="1" value={cot.vigencia_dias} />
+              </label>
+            )
+          }
         </div>
       </div>
 
       <div class="caja">
-        <h2>Partidas</h2>
+        <h2>{esNota ? 'Trabajos realizados' : 'Partidas'}</h2>
 
         {
           partidas.length === 0 && (
             <p style="color:var(--ink-2);font-size:14px;margin-bottom:14px">
-              Aún no hay partidas. Agrega una, pega el enlace del producto y pulsa
-              «Leer enlace»: se rellenan solos el nombre y la foto.
+              {esNota
+                ? 'Aún no hay conceptos. Agrega uno por cada bloque de trabajo y dentro lista las tareas, una por renglón.'
+                : 'Aún no hay partidas. Agrega una, pega el enlace del producto y pulsa «Leer enlace»: se rellenan solos el nombre y la foto.'}
             </p>
           )
         }
@@ -205,100 +305,131 @@ const t = totales(partidas);
               <div class="partida-top">
                 <div class="partida-n">{String(i + 1).padStart(2, '0')}</div>
 
-                <div class="miniatura" data-mini>
-                  {p.imagen ? (
-                    <img src={`/imagen/${p.imagen}`} alt="" />
-                  ) : (
-                    <span>sin foto</span>
-                  )}
-                </div>
+                {!esNota && (
+                  <div class="miniatura" data-mini>
+                    {p.imagen ? <img src={`/imagen/${p.imagen}`} alt="" /> : <span>sin foto</span>}
+                  </div>
+                )}
 
                 <div class="partida-campos">
                   <label class="campo">
-                    <span>Descripción (esto ve el cliente)</span>
+                    <span>
+                      {esNota ? 'Concepto (esto ve el cliente)' : 'Descripción (esto ve el cliente)'}
+                    </span>
                     <input
                       name={`p-${p.id}-descripcion`}
                       value={p.descripcion}
-                      placeholder="Cámara IP domo 4 MP"
+                      placeholder={
+                        esNota ? 'Configuración de usuario para acceso remoto' : 'Cámara IP domo 4 MP'
+                      }
                       autocomplete="off"
                     />
                   </label>
 
-                  <div class="rejilla c2">
-                    <label class="campo interno">
-                      <span>Enlace donde lo compras</span>
-                      <input
-                        name={`p-${p.id}-enlace`}
-                        value={p.enlace}
-                        placeholder="https://..."
-                        data-enlace
-                        autocomplete="off"
-                      />
-                    </label>
+                  {esNota ? (
                     <label class="campo">
-                      <span>URL de la imagen</span>
-                      <input
-                        name={`p-${p.id}-imagen_origen`}
-                        value={p.imagen_origen}
-                        placeholder="https://... (se guarda una copia)"
-                        data-imagen
-                        autocomplete="off"
-                      />
+                      <span>Tareas de este concepto (una por renglón)</span>
+                      {/* En una sola línea a propósito: lo que haya entre las
+                          etiquetas de un textarea ES su contenido, y partirlo
+                          en varias metería la sangría del código dentro del
+                          texto. */}
+                      <textarea name={`p-${p.id}-detalle`} rows="4" placeholder="Creación del usuario local IBCA1 en Windows Server 2012&#10;Asignación al grupo Usuarios de escritorio remoto">{p.detalle}</textarea>
                     </label>
-                  </div>
+                  ) : (
+                    <div class="rejilla c2">
+                      <label class="campo interno">
+                        <span>Enlace donde lo compras</span>
+                        <input
+                          name={`p-${p.id}-enlace`}
+                          value={p.enlace}
+                          placeholder="https://..."
+                          data-enlace
+                          autocomplete="off"
+                        />
+                      </label>
+                      <label class="campo">
+                        <span>URL de la imagen</span>
+                        <input
+                          name={`p-${p.id}-imagen_origen`}
+                          value={p.imagen_origen}
+                          placeholder="https://... (se guarda una copia)"
+                          data-imagen
+                          autocomplete="off"
+                        />
+                      </label>
+                    </div>
+                  )}
 
-                  <div class="partida-cifras">
-                    <label class="campo">
-                      <span>Marca</span>
-                      <input name={`p-${p.id}-marca`} value={p.marca} data-marca autocomplete="off" />
-                    </label>
-                    <label class="campo">
-                      <span>Unidad</span>
-                      <input name={`p-${p.id}-unidad`} value={p.unidad} autocomplete="off" />
-                    </label>
-                    <label class="campo">
-                      <span>Cantidad</span>
-                      <input
-                        class="num"
-                        name={`p-${p.id}-cantidad`}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={p.cantidad}
-                        data-cant
-                      />
-                    </label>
-                    <label class="campo">
-                      <span>Precio unitario</span>
-                      <input
-                        class="num"
-                        name={`p-${p.id}-precio`}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={aInput(p.precio_centavos)}
-                        data-precio
-                      />
-                    </label>
-                  </div>
+                  {/* Con precio cerrado los conceptos van sin cifras: no se
+                      pintan los campos para que no parezca que algo se perdió
+                      al no salir impreso. */}
+                  {!cerrado && (
+                    <div class={esNota ? 'partida-cifras nota' : 'partida-cifras'}>
+                      {!esNota && (
+                        <label class="campo">
+                          <span>Marca</span>
+                          <input name={`p-${p.id}-marca`} value={p.marca} data-marca autocomplete="off" />
+                        </label>
+                      )}
+                      <label class="campo">
+                        <span>Unidad</span>
+                        <input
+                          name={`p-${p.id}-unidad`}
+                          value={p.unidad}
+                          placeholder={esNota ? 'serv' : 'pza'}
+                          autocomplete="off"
+                        />
+                      </label>
+                      <label class="campo">
+                        <span>Cantidad</span>
+                        <input
+                          class="num"
+                          name={`p-${p.id}-cantidad`}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={p.cantidad}
+                          data-cant
+                        />
+                      </label>
+                      <label class="campo">
+                        <span>{esNota ? 'Precio del concepto' : 'Precio unitario'}</span>
+                        <input
+                          class="num"
+                          name={`p-${p.id}-precio`}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={aInput(p.precio_centavos)}
+                          data-precio
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
 
-                <div style="min-width:130px">
-                  <span class="etq" style="display:block;text-align:right">Importe</span>
-                  <div class="importe" data-importe>
-                    {pesos(importe(p.cantidad, p.precio_centavos))}
+                {!cerrado && (
+                  <div style="min-width:130px">
+                    <span class="etq" style="display:block;text-align:right">Importe</span>
+                    <div class="importe" data-importe>
+                      {pesos(importe(p.cantidad, p.precio_centavos))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               <div class="partida-acciones">
-                <button class="btn gris sm" type="button" data-leer>
-                  Leer enlace
-                </button>
-                {p.enlace && (
-                  <a class="btn gris sm" href={p.enlace} target="_blank" rel="noopener">
-                    Abrir tienda
-                  </a>
+                {!esNota && (
+                  <Fragment>
+                    <button class="btn gris sm" type="button" data-leer>
+                      Leer enlace
+                    </button>
+                    {p.enlace && (
+                      <a class="btn gris sm" href={p.enlace} target="_blank" rel="noopener">
+                        Abrir tienda
+                      </a>
+                    )}
+                  </Fragment>
                 )}
                 <span class="sep" />
                 <button class="btn gris sm" type="submit" name="accion" value={`subir:${p.id}`}>
@@ -312,7 +443,7 @@ const t = totales(partidas);
                   type="submit"
                   name="accion"
                   value={`eliminar:${p.id}`}
-                  data-confirmar="¿Eliminar esta partida?"
+                  data-confirmar={esNota ? '¿Eliminar este concepto?' : '¿Eliminar esta partida?'}
                 >
                   Eliminar
                 </button>
@@ -321,18 +452,60 @@ const t = totales(partidas);
           ))
         }
 
-        <button class="btn" type="submit" name="accion" value="agregar">+ Agregar partida</button>
+        <button class="btn" type="submit" name="accion" value="agregar">
+          + Agregar {esNota ? 'concepto' : 'partida'}
+        </button>
       </div>
 
       <div class="caja">
-        <h2>Totales</h2>
+        <h2>{esNota ? 'Importe y pago' : 'Totales'}</h2>
+
+        {
+          esNota && (
+            <div class="iva-control">
+              <label class="campo">
+                <span>Cómo se cobra</span>
+                <select name="cobro_modo">
+                  <option value="cerrado" selected={cot.cobro_modo === 'cerrado'}>
+                    Precio cerrado por el trabajo
+                  </option>
+                  <option value="por_concepto" selected={cot.cobro_modo !== 'cerrado'}>
+                    Desglosado por concepto
+                  </option>
+                </select>
+              </label>
+              {/* readonly y no disabled: un campo deshabilitado no se envía, y
+                  cada guardado en modo desglosado dejaría el importe cerrado en
+                  cero, perdiéndolo al volver a cambiar de modo. */}
+              <label class="campo">
+                <span>Importe del servicio</span>
+                <input
+                  class="num"
+                  name="importe_cerrado"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={aInput(cot.importe_cerrado_centavos)}
+                  readonly={!cerrado}
+                  data-cerrado-importe
+                />
+              </label>
+              <p class="iva-nota">
+                Con <b>precio cerrado</b> se cobra un solo importe por el trabajo
+                completo y los conceptos salen listados sin cifras —es lo normal
+                en servicios—. Con <b>desglosado</b> cada concepto lleva su precio
+                y el total es la suma.
+              </p>
+            </div>
+          )
+        }
 
         <div class="iva-control">
           <label class="campo">
             <span>IVA</span>
             <select name="iva_modo">
               <option value="incluido" selected={cot.iva_modo !== 'sumado'}>
-                Ya incluido en los precios
+                Ya incluido en el importe
               </option>
               <option value="sumado" selected={cot.iva_modo === 'sumado'}>
                 Sumarlo al total
@@ -352,32 +525,52 @@ const t = totales(partidas);
             />
           </label>
           <p class="iva-nota">
-            Los precios de SYSCOM vienen <b>con IVA incluido</b>: con esa opción
-            el documento separa cuánto del total es impuesto. Pon
-            <b>0</b> para quitar el desglose.
+            {
+              esNota
+                ? 'Pon 0 si cobraste un importe único sin desglosar impuestos: el documento no imprimirá el renglón del IVA.'
+                : 'Los precios de SYSCOM vienen con IVA incluido: con esa opción el documento separa cuánto del total es impuesto. Pon 0 para quitar el desglose.'
+            }
           </p>
         </div>
 
         <div class="totales">
           <div class="total-celda">
-            <span class="etq">Partidas</span>
+            <span class="etq">{esNota ? 'Conceptos' : 'Partidas'}</span>
             <b>{partidas.length}</b>
           </div>
           <div class="total-celda">
-            <span class="etq">Piezas</span>
-            <b data-tot-piezas>{t.piezas}</b>
+            <span class="etq">{esNota ? 'Estado del cobro' : 'Piezas'}</span>
+            {
+              esNota ? (
+                <b class={cot.pagado_en ? 'bien' : 'alerta'} style="font-size:14px">
+                  {cot.pagado_en ? 'Pagada' : 'Pendiente'}
+                </b>
+              ) : (
+                <b data-tot-piezas>{t.piezas}</b>
+              )
+            }
           </div>
           <div class="total-celda">
             <span class="etq" data-etq-iva>
-              IVA {cot.iva_pct}% {cot.iva_modo === 'sumado' ? 'sumado' : 'incluido'}
+              {cot.iva_pct > 0
+                ? `IVA ${cot.iva_pct}% ${cot.iva_modo === 'sumado' ? 'sumado' : 'incluido'}`
+                : 'Sin IVA'}
             </span>
-            <b data-tot-iva>{pesos(desglosarIva(t.precio, cot.iva_pct, cot.iva_modo).iva)}</b>
+            <b data-tot-iva>{pesos(iva.iva)}</b>
           </div>
           <div class="total-celda destacado">
-            <span class="etq">Total al cliente</span>
-            <b data-tot-precio>{pesos(desglosarIva(t.precio, cot.iva_pct, cot.iva_modo).total)}</b>
+            <span class="etq">{esNota ? 'Total cobrado' : 'Total al cliente'}</span>
+            <b data-tot-precio>{pesos(iva.total)}</b>
           </div>
         </div>
+
+        {
+          esNota && (
+            <p class="letras-previa" data-letras>
+              {enLetras(iva.total)}
+            </p>
+          )
+        }
       </div>
 
       <div class="caja">
@@ -392,20 +585,38 @@ const t = totales(partidas);
             <textarea name="condiciones" rows="4">{cot.condiciones}</textarea>
           </label>
         </div>
+        {
+          esNota && (
+            <label class="casilla" style="margin-top:12px">
+              {/* El oculto siempre viaja; la casilla solo cuando está marcada.
+                  Así el servidor distingue «desmarcada» de «no venía». */}
+              <input type="hidden" name="firmas_presente" value="1" />
+              <input type="checkbox" name="firmas" checked={cot.firmas === 1} />
+              <span>Imprimir líneas de firma del responsable y del cliente</span>
+            </label>
+          )
+        }
       </div>
 
       <div class="barra" style="margin-top:18px">
         <button class="btn" type="submit" name="accion" value="guardar">Guardar</button>
         <button class="btn gris" type="submit" name="accion" value="duplicar">Duplicar</button>
+        {
+          !esNota && (
+            <button class="btn gris" type="submit" name="accion" value="a-nota">
+              Convertir en nota de servicios
+            </button>
+          )
+        }
         <span class="sep"></span>
         <button
           class="btn mal"
           type="submit"
           name="accion"
           value="borrar"
-          data-confirmar={`¿Borrar la cotización ${cot.folio} entera? No se puede deshacer.`}
+          data-confirmar={`¿Borrar ${cot.folio} entero? No se puede deshacer.`}
         >
-          Borrar cotización
+          Borrar {esNota ? 'nota' : 'cotización'}
         </button>
       </div>
     </form>
@@ -415,19 +626,26 @@ const t = totales(partidas);
 <script>
   const mx = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
   const form = document.getElementById('f');
+  const cerrado = form?.dataset.cerrado === '1';
 
   /** Recalcula importes, IVA y total sin ir al servidor. */
   function recalcular() {
     let suma = 0;
     let piezas = 0;
-    document.querySelectorAll('[data-partida]').forEach((fila) => {
-      const cant = parseFloat(fila.querySelector('[data-cant]').value) || 0;
-      const p = Math.round((parseFloat(fila.querySelector('[data-precio]').value) || 0) * 100);
-      const imp = Math.round(cant * p);
-      suma += imp;
-      piezas += cant;
-      fila.querySelector('[data-importe]').textContent = mx.format(imp / 100);
-    });
+
+    if (cerrado) {
+      // El importe lo pone Alberto a mano; los conceptos no llevan cifras.
+      suma = Math.round((parseFloat(form.querySelector('[data-cerrado-importe]')?.value) || 0) * 100);
+    } else {
+      document.querySelectorAll('[data-partida]').forEach((fila) => {
+        const cant = parseFloat(fila.querySelector('[data-cant]').value) || 0;
+        const p = Math.round((parseFloat(fila.querySelector('[data-precio]').value) || 0) * 100);
+        const imp = Math.round(cant * p);
+        suma += imp;
+        piezas += cant;
+        fila.querySelector('[data-importe]').textContent = mx.format(imp / 100);
+      });
+    }
 
     const pct = parseFloat(form.querySelector('[name="iva_pct"]').value) || 0;
     const modo = form.querySelector('[name="iva_modo"]').value;
@@ -447,16 +665,66 @@ const t = totales(partidas);
     document.querySelector('[data-tot-iva]').textContent = mx.format(iva / 100);
     document.querySelector('[data-etq-iva]').textContent =
       pct > 0 ? `IVA ${pct}% ${modo === 'sumado' ? 'sumado' : 'incluido'}` : 'Sin IVA';
-    document.querySelector('[data-tot-piezas]').textContent = String(
-      Number.isInteger(piezas) ? piezas : piezas.toFixed(2),
-    );
+
+    const piezasEl = document.querySelector('[data-tot-piezas]');
+    if (piezasEl) {
+      piezasEl.textContent = String(Number.isInteger(piezas) ? piezas : piezas.toFixed(2));
+    }
+
+    const letras = document.querySelector('[data-letras]');
+    if (letras) letras.textContent = conLetra(total);
+  }
+
+  /* El importe con letra también en pantalla: así se ve antes de imprimir que
+     la cifra y la letra dicen lo mismo. Es una copia de enLetras() del
+     servidor; si una cambia, la otra también. */
+  const UNID = ['','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve','veinte','veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve'];
+  const DEC = ['','','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+  const CEN = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos'];
+  const apoc = (s) => s.replace(/veintiuno$/, 'veintiún').replace(/(^|\s)uno$/, '$1un');
+  function c999(n) {
+    if (n === 100) return 'cien';
+    const c = Math.floor(n / 100), r = n % 100, p = [];
+    if (c) p.push(CEN[c]);
+    if (r < 30) { if (r) p.push(UNID[r]); }
+    else p.push(DEC[Math.floor(r / 10)] + (r % 10 ? ' y ' + UNID[r % 10] : ''));
+    return p.join(' ');
+  }
+  function c999999(n) {
+    const m = Math.floor(n / 1000), r = n % 1000, p = [];
+    if (m === 1) p.push('mil');
+    else if (m) p.push(apoc(c999(m)) + ' mil');
+    if (r) p.push(c999(r));
+    return p.join(' ');
+  }
+  function conLetra(centavos) {
+    const abs = Math.abs(Math.round(centavos));
+    const ent = Math.floor(abs / 100), cen = abs % 100;
+    let s;
+    if (ent === 0) s = 'cero';
+    else {
+      const mi = Math.floor(ent / 1000000), r = ent % 1000000, p = [];
+      if (mi === 1) p.push('un millón');
+      else if (mi) p.push(apoc(c999999(mi)) + ' millones');
+      if (r) p.push(c999999(r));
+      s = p.join(' ');
+    }
+    s = apoc(s);
+    const de = /mill(ón|ones)$/.test(s) ? 'de ' : '';
+    const f = `${s} ${de}${ent === 1 ? 'peso' : 'pesos'} ${String(cen).padStart(2, '0')}/100 M.N.`;
+    return f.charAt(0).toUpperCase() + f.slice(1);
   }
 
   form?.addEventListener('input', (e) => {
-    if (e.target.matches('[data-cant],[data-precio],[name="iva_pct"]')) recalcular();
+    if (e.target.matches('[data-cant],[data-precio],[name="iva_pct"],[data-cerrado-importe]')) {
+      recalcular();
+    }
   });
   form?.addEventListener('change', (e) => {
     if (e.target.matches('[name="iva_modo"]')) recalcular();
+    // Cambiar el modo de cobro reordena la pantalla entera: se guarda para que
+    // el servidor vuelva a pintarla con los campos que toquen.
+    if (e.target.matches('[name="cobro_modo"]')) form.requestSubmit();
   });
   recalcular();
 

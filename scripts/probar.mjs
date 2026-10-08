@@ -80,8 +80,11 @@ const html2 = await (await fetch(`${BASE}/cotizacion/${id}`)).text();
 // 3 × 1890.00 = 5670.00 ; + 6250.75 = 11,920.75
 // costo: 3 × 1250.50 = 3751.50 ; + 4300 = 8,051.50 ; margen = 3,869.25
 ok(html2.includes('11,920.75'), 'total al cliente = $11,920.75');
-ok(html2.includes('8,051.50'), 'costo = $8,051.50');
-ok(html2.includes('3,869.25'), 'margen = $3,869.25');
+// El costo ya no se teclea ni se pinta en el editor —una sola columna de
+// dinero—, pero el dato sigue guardado y el margen sale en el listado, que es
+// donde se mira para saber si el año va bien.
+const portada = await (await fetch(`${BASE}/`)).text();
+ok(portada.includes('3,869.25'), 'el margen sale en el listado = $3,869.25');
 
 console.log('\n── el documento del cliente ───────────────────────');
 const doc = await (await fetch(`${BASE}/cotizacion/${id}/imprimir`)).text();

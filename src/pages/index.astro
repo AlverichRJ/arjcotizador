@@ -1,108 +1,226 @@
 ---
 import App from '../layouts/App.astro';
 import { listarCotizaciones, partidasDe, crearCotizacion } from '../db/index';
-import { pesos, totales, fechaLarga } from '../lib/dinero';
+import { pesos, totales, fechaLarga, sumaDocumento, desglosarIva, aTexto } from '../lib/dinero';
 
 export const prerender = false;
 
-// "Nueva cotización" es un POST, no un enlace: así no se crea una cotización
-// vacía cada vez que alguien recarga la página o vuelve con el botón atrás.
+// "Nuevo documento" es un POST, no un enlace: así no se crea uno vacío cada
+// vez que alguien recarga la página o vuelve con el botón atrás.
 if (Astro.request.method === 'POST') {
-  const id = crearCotizacion();
+  const f = await Astro.request.formData();
+  const tipo = aTexto(f.get('tipo')) === 'nota' ? 'nota' : 'cotizacion';
+  const id = crearCotizacion(tipo);
   return Astro.redirect(`/cotizacion/${id}`, 303);
 }
 
-const cotizaciones = listarCotizaciones().map((c) => {
-  const t = totales(partidasDe(c.id));
-  return { ...c, t };
+const anio = new Date().getFullYear();
+
+// `suma` es el total que paga el cliente, con el IVA ya resuelto: es la cifra
+// que sale en el documento, y la que tiene que cuadrar con lo cobrado.
+const docs = listarCotizaciones().map((c) => {
+  const partidas = partidasDe(c.id);
+  const base = sumaDocumento(c, partidas);
+  return {
+    ...c,
+    t: totales(partidas),
+    suma: desglosarIva(base, c.iva_pct, c.iva_modo).total,
+    n: partidas.length,
+  };
 });
 
-const anio = new Date().getFullYear();
-const delAnio = cotizaciones.filter((c) => c.anio === anio);
-const aceptadas = delAnio.filter((c) => c.estado === 'aceptada');
-const sumaAceptadas = aceptadas.reduce((a, c) => a + c.t.precio, 0);
+const cotizaciones = docs.filter((c) => c.tipo !== 'nota');
+const notas = docs.filter((c) => c.tipo === 'nota');
+
+const cotAnio = cotizaciones.filter((c) => c.anio === anio);
+const aceptadas = cotAnio.filter((c) => c.estado === 'aceptada');
+const sumaAceptadas = aceptadas.reduce((a, c) => a + c.suma, 0);
 const margenAceptadas = aceptadas.reduce((a, c) => a + c.t.margen, 0);
+
+const notasAnio = notas.filter((c) => c.anio === anio);
+const cobrado = notasAnio.filter((c) => c.pagado_en).reduce((a, c) => a + c.suma, 0);
+// Lo que falta entrar: enviadas y sin fecha de pago. Las canceladas y los
+// borradores no cuentan como dinero por cobrar.
+const porCobrar = notasAnio
+  .filter((c) => !c.pagado_en && c.estado === 'enviada')
+  .reduce((a, c) => a + c.suma, 0);
 ---
 
-<App titulo="Cotizaciones">
+<App titulo="Documentos">
   <div class="wrap">
     <div class="barra">
-      <h1>Cotizaciones</h1>
+      <h1>Cotizaciones y notas</h1>
       <span class="sep"></span>
       <form method="POST">
+        <input type="hidden" name="tipo" value="nota" />
+        <button class="btn gris" type="submit">Nueva nota de servicios</button>
+      </form>
+      <form method="POST">
+        <input type="hidden" name="tipo" value="cotizacion" />
         <button class="btn" type="submit">Nueva cotización</button>
       </form>
     </div>
 
     {
-      cotizaciones.length > 0 && (
-        <div class="totales" style="margin-bottom:18px">
-          <div class="total-celda">
-            <span class="etq">Cotizaciones {anio}</span>
-            <b>{delAnio.length}</b>
-          </div>
-          <div class="total-celda">
-            <span class="etq">Aceptadas</span>
-            <b>{aceptadas.length}</b>
-          </div>
-          <div class="total-celda">
-            <span class="etq">Vendido {anio}</span>
-            <b>{pesos(sumaAceptadas)}</b>
-          </div>
-          <div class="total-celda">
-            <span class="etq">Margen {anio}</span>
-            <b class={margenAceptadas >= 0 ? 'bien' : 'mal'}>{pesos(margenAceptadas)}</b>
-          </div>
-        </div>
-      )
-    }
-
-    {
-      cotizaciones.length === 0 ? (
+      docs.length === 0 ? (
         <div class="vacio">
           <p>
-            <b>Todavía no hay ninguna cotización.</b>
+            <b>Todavía no hay nada.</b>
           </p>
           <p style="margin-top:8px">
-            Pulsa «Nueva cotización», pega los enlaces de los productos y el
-            cotizador hace el resto.
+            Una <b>cotización</b> es lo que ofreces antes de trabajar: pega los
+            enlaces de los productos y el cotizador hace el resto.
+            <br />
+            Una <b>nota de servicios</b> es lo que cobras después: los trabajos
+            que hiciste y el importe.
           </p>
         </div>
       ) : (
-        <table class="tabla">
-          <thead>
-            <tr>
-              <th>Folio</th>
-              <th>Cliente</th>
-              <th>Proyecto</th>
-              <th>Fecha</th>
-              <th class="der">Partidas</th>
-              <th class="der">Total</th>
-              <th class="der">Margen</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cotizaciones.map((c) => (
-              <tr>
-                <td>
-                  <a class="folio" href={`/cotizacion/${c.id}`}>
-                    {c.folio}
-                  </a>
-                </td>
-                <td>{c.cliente_empresa || c.cliente_nombre || '—'}</td>
-                <td>{c.proyecto || '—'}</td>
-                <td>{fechaLarga(c.fecha)}</td>
-                <td class="der doc-num">{partidasDe(c.id).length}</td>
-                <td class="der doc-num">{pesos(c.t.precio)}</td>
-                <td class="der doc-num">{pesos(c.t.margen)}</td>
-                <td>
-                  <span class={`estado ${c.estado}`}>{c.estado}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Fragment>
+          <section class="serie-bloque">
+            <div class="serie-cabeza">
+              <h2>Cotizaciones</h2>
+              <p>Lo que ofreces antes de trabajar · folio COT</p>
+            </div>
+
+            {cotizaciones.length === 0 ? (
+              <p class="serie-vacia">Ninguna todavía.</p>
+            ) : (
+              <Fragment>
+                <div class="totales" style="margin-bottom:14px">
+                  <div class="total-celda">
+                    <span class="etq">Cotizaciones {anio}</span>
+                    <b>{cotAnio.length}</b>
+                  </div>
+                  <div class="total-celda">
+                    <span class="etq">Aceptadas</span>
+                    <b>{aceptadas.length}</b>
+                  </div>
+                  <div class="total-celda">
+                    <span class="etq">Vendido {anio}</span>
+                    <b>{pesos(sumaAceptadas)}</b>
+                  </div>
+                  <div class="total-celda">
+                    <span class="etq">Margen {anio}</span>
+                    <b class={margenAceptadas >= 0 ? 'bien' : 'mal'}>{pesos(margenAceptadas)}</b>
+                  </div>
+                </div>
+
+                <table class="tabla">
+                  <thead>
+                    <tr>
+                      <th>Folio</th>
+                      <th>Cliente</th>
+                      <th>Proyecto</th>
+                      <th>Fecha</th>
+                      <th class="der">Partidas</th>
+                      <th class="der">Total</th>
+                      <th class="der">Margen</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cotizaciones.map((c) => (
+                      <tr>
+                        <td>
+                          <a class="folio" href={`/cotizacion/${c.id}`}>
+                            {c.folio}
+                          </a>
+                        </td>
+                        <td>{c.cliente_empresa || c.cliente_nombre || '—'}</td>
+                        <td>{c.proyecto || '—'}</td>
+                        <td>{fechaLarga(c.fecha)}</td>
+                        <td class="der doc-num">{c.n}</td>
+                        <td class="der doc-num">{pesos(c.suma)}</td>
+                        <td class="der doc-num">{pesos(c.t.margen)}</td>
+                        <td>
+                          <span class={`estado ${c.estado}`}>{c.estado}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Fragment>
+            )}
+          </section>
+
+          <section class="serie-bloque">
+            <div class="serie-cabeza">
+              <h2>Notas de servicios</h2>
+              <p>Lo que cobras después de trabajar · folio NS</p>
+            </div>
+
+            {notas.length === 0 ? (
+              <p class="serie-vacia">
+                Ninguna todavía. Pulsa «Nueva nota de servicios», o abre una
+                cotización aceptada y usa «Convertir en nota de servicios» para
+                no teclear dos veces lo mismo.
+              </p>
+            ) : (
+              <Fragment>
+                <div class="totales" style="margin-bottom:14px">
+                  <div class="total-celda">
+                    <span class="etq">Notas {anio}</span>
+                    <b>{notasAnio.length}</b>
+                  </div>
+                  <div class="total-celda">
+                    <span class="etq">Pagadas</span>
+                    <b>{notasAnio.filter((c) => c.pagado_en).length}</b>
+                  </div>
+                  <div class="total-celda">
+                    <span class="etq">Cobrado {anio}</span>
+                    <b class="bien">{pesos(cobrado)}</b>
+                  </div>
+                  <div class="total-celda">
+                    <span class="etq">Por cobrar</span>
+                    <b class={porCobrar > 0 ? 'alerta' : ''}>{pesos(porCobrar)}</b>
+                  </div>
+                </div>
+
+                <table class="tabla">
+                  <thead>
+                    <tr>
+                      <th>Folio</th>
+                      <th>Cliente</th>
+                      <th>Servicio</th>
+                      <th>Fecha</th>
+                      <th class="der">Conceptos</th>
+                      <th class="der">Importe</th>
+                      <th>Cobro</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {notas.map((c) => (
+                      <tr>
+                        <td>
+                          <a class="folio" href={`/cotizacion/${c.id}`}>
+                            {c.folio}
+                          </a>
+                        </td>
+                        <td>{c.cliente_empresa || c.cliente_nombre || '—'}</td>
+                        <td>{c.proyecto || '—'}</td>
+                        <td>{fechaLarga(c.fecha)}</td>
+                        <td class="der doc-num">{c.n}</td>
+                        <td class="der doc-num">{pesos(c.suma)}</td>
+                        <td>
+                          {c.pagado_en ? (
+                            <span class="cobro bien">{fechaLarga(c.pagado_en)}</span>
+                          ) : (
+                            <span class="cobro alerta">pendiente</span>
+                          )}
+                        </td>
+                        <td>
+                          <span class={`estado ${c.estado}`}>{c.estado}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Fragment>
+            )}
+          </section>
+        </Fragment>
       )
     }
   </div>

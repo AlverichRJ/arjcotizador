@@ -15,6 +15,8 @@ export const prerender = false;
 const id = Number(Astro.params.id);
 const cot = obtenerCotizacion(id);
 if (!cot) return new Response('No existe esa cotización', { status: 404 });
+// En una nota de servicios no hay nada que comprar: son horas de trabajo.
+if (cot.tipo === 'nota') return Astro.redirect(`/cotizacion/${id}`, 303);
 
 const partidas = partidasDe(id);
 const t = totales(partidas);

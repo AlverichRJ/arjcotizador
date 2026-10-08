@@ -143,8 +143,23 @@ input.num { font-family: var(--f-mono); text-align: right; }
 .estado { display: inline-block; padding: 3px 8px; border-radius: 2px; font-family: var(--f-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--acc-on); }
 .estado.borrador { background: var(--muted); }
 .estado.enviada { background: var(--acc); }
-.estado.aceptada { background: var(--ok); }
-.estado.rechazada { background: var(--mal); }
+.estado.aceptada, .estado.pagada { background: var(--ok); }
+.estado.rechazada, .estado.cancelada { background: var(--mal); }
+
+/* --- las dos series: cotizaciones y notas -------------------------------- */
+
+.serie-bloque + .serie-bloque { margin-top: 34px; }
+.serie-cabeza { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding-bottom: 9px; border-bottom: 2px solid var(--dark); }
+.serie-cabeza h2 { font-size: 18px; }
+.serie-cabeza p { font-family: var(--f-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.serie-vacia { background: var(--bg); border: 1px dashed var(--line); border-radius: var(--r); padding: 20px; font-size: 13.5px; color: var(--ink-2); }
+
+/* El tipo de documento, junto al folio en la barra del editor. */
+.serie { font-family: var(--f-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); border: 1px solid var(--line); border-radius: 2px; padding: 3px 8px; }
+
+.cobro { font-family: var(--f-mono); font-size: 11px; }
+.cobro.bien { color: var(--ok); }
+.cobro.alerta { color: var(--alerta); }
 
 .vacio { background: var(--bg); border: 1px dashed var(--line); border-radius: var(--r); padding: 42px; text-align: center; color: var(--ink-2); }
 
@@ -166,6 +181,8 @@ input.num { font-family: var(--f-mono); text-align: right; }
 
 .partida-campos { flex: 1; display: grid; gap: 10px; }
 .partida-cifras { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-items: end; }
+/* En una nota no hay marca ni foto: tres campos, no cinco. */
+.partida-cifras.nota { grid-template-columns: repeat(3, 1fr); }
 .importe { font-family: var(--f-mono); font-size: 16px; font-weight: 600; text-align: right; padding-bottom: 8px; }
 .margen-linea { font-family: var(--f-mono); font-size: 10px; text-align: right; color: var(--muted); }
 .margen-linea.bien { color: var(--ok); }
@@ -217,6 +234,14 @@ input.num { font-family: var(--f-mono); text-align: right; }
 .total-celda.destacado b { color: var(--acc); font-size: 24px; }
 .total-celda .bien { color: var(--ok); }
 .total-celda .mal { color: var(--mal); }
+.total-celda .alerta { color: var(--alerta); }
+
+/* El importe con letra bajo los totales del editor: se lee antes de imprimir
+   para comprobar que la cifra y la letra dicen lo mismo. */
+.letras-previa { margin-top: 12px; font-size: 13px; color: var(--ink-2); font-style: italic; }
+
+.casilla { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; }
+.casilla input { width: auto; flex: none; }
 
 /* ===========================================================================
    EL DOCUMENTO: se ve igual en pantalla y en el PDF
@@ -272,9 +297,48 @@ table.doc tbody tr:nth-child(even) td { background: #fafbfb; }
 .doc-total td.der { text-align: right; font-family: var(--f-mono); }
 
 .doc-pie { margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1.3fr 1fr; gap: 26px; }
+.doc-pie.ancho { grid-template-columns: 1fr; }
 .doc-pie .etq { display: block; margin-bottom: 6px; }
 .doc-pie p { font-size: 12px; color: var(--ink-2); line-height: 1.6; white-space: pre-line; }
 .doc-firma { margin-top: 42px; border-top: 1px solid var(--ink); padding-top: 7px; font-size: 11.5px; color: var(--ink-2); text-align: center; }
+
+/* --- la nota de servicios ------------------------------------------------ */
+
+/* Sello de cobrado junto al folio: es lo primero que se busca al archivarla. */
+.doc-sello {
+  display: inline-block; margin-top: 10px;
+  padding: 3px 9px; border: 1px solid currentColor; border-radius: 2px;
+  font-family: var(--f-mono); font-size: 9px; text-transform: uppercase; letter-spacing: .12em;
+}
+.doc-sello.pagado { color: var(--ok); }
+.doc-sello.pendiente { color: var(--alerta); }
+
+.doc-titulo { margin-top: 24px; font-size: 13px; font-family: var(--f-mono); text-transform: uppercase; letter-spacing: .14em; color: var(--ink-2); }
+.doc-aviso { margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+
+table.doc.nota { margin-top: 10px; }
+.doc-tareas { margin: 6px 0 0; padding-left: 15px; }
+.doc-tareas li { font-size: 11.5px; color: var(--ink-2); line-height: 1.5; margin-bottom: 2px; }
+.doc-tareas li::marker { color: var(--acc); }
+
+/* Precio cerrado: el importe no es la suma de nada, así que se enuncia solo y
+   grande, como en el desglose que firma el cliente. */
+.doc-cerrado {
+  margin-top: 22px; padding: 18px 20px;
+  border: 1px solid var(--line); border-left: 3px solid var(--acc); border-radius: var(--r);
+  background: var(--paper);
+}
+.doc-cerrado .cifra { font-family: var(--f-mono); font-size: 30px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; }
+.doc-cerrado .letra { margin-top: 3px; font-size: 13px; color: var(--ink-2); font-style: italic; }
+.doc-cerrado .nota-iva { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--ink-2); }
+
+.doc-letra-linea { margin-top: 10px; text-align: right; font-size: 12px; color: var(--ink-2); font-style: italic; }
+.doc-letra-linea .etq { display: inline; margin-right: 6px; font-style: normal; }
+
+.doc-firmas { margin-top: 34px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+.doc-firmas .etq { display: block; margin-bottom: 4px; }
+/* El hueco de arriba es donde se firma: sin él no hay dónde poner la pluma. */
+.doc-firmas .doc-firma { margin-top: 48px; }
 
 .solo-pantalla { display: block; }
 
@@ -293,18 +357,20 @@ table.doc tbody tr:nth-child(even) td { background: #fafbfb; }
   /* que ningún renglón se parta entre dos páginas */
   table.doc tr { break-inside: avoid; }
   table.doc thead { display: table-header-group; }
-  .doc-total, .doc-pie { break-inside: avoid; }
+  .doc-total, .doc-pie, .doc-cerrado, .doc-firmas { break-inside: avoid; }
+  /* y que las firmas no se queden solas en una página en blanco */
+  .doc-firmas { break-before: avoid; }
 
   /* los fondos oscuros del encabezado y del total deben imprimirse */
-  table.doc th, .doc-total tr.final td, .doc-cabeza { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  table.doc th, .doc-total tr.final td, .doc-cabeza, .doc-cerrado, .doc-sello { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
   a { color: var(--ink); text-decoration: none; }
 }
 
 @media (max-width: 900px) {
   .rejilla.c4, .rejilla.c3, .rejilla.c2 { grid-template-columns: 1fr 1fr; }
-  .partida-cifras { grid-template-columns: 1fr 1fr; }
+  .partida-cifras, .partida-cifras.nota { grid-template-columns: 1fr 1fr; }
   .totales { grid-template-columns: 1fr 1fr; }
-  .doc-partes, .doc-pie { grid-template-columns: 1fr; }
+  .doc-partes, .doc-pie, .doc-firmas { grid-template-columns: 1fr; }
   .hoja { padding: 22px; }
 }

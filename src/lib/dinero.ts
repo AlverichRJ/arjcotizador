@@ -103,6 +103,103 @@ export function desglosarIva(sumaPartidas: number, pct: number, modo = 'incluido
   return { sinIva, iva: sumaPartidas - sinIva, total: sumaPartidas };
 }
 
+/**
+ * Cuánto manda el documento, que no siempre es la suma de las partidas.
+ *
+ * En una nota de servicio con precio cerrado los conceptos van sin cifras —se
+ * cobró el trabajo terminado, no cada paso— y el importe es el que se acordó.
+ */
+export function sumaDocumento(
+  cot: { cobro_modo?: string; importe_cerrado_centavos?: number },
+  partidas: Array<{ cantidad: number; costo_centavos: number; precio_centavos: number }>,
+): number {
+  if (cot.cobro_modo === 'cerrado') return cot.importe_cerrado_centavos ?? 0;
+  return totales(partidas).precio;
+}
+
+/* --- el importe con letra ------------------------------------------------ */
+
+const UNIDADES = [
+  '', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve',
+  'diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete',
+  'dieciocho', 'diecinueve', 'veinte', 'veintiuno', 'veintidós', 'veintitrés',
+  'veinticuatro', 'veinticinco', 'veintiséis', 'veintisiete', 'veintiocho',
+  'veintinueve',
+];
+const DECENAS = [
+  '', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta',
+  'ochenta', 'noventa',
+];
+const CENTENAS = [
+  '', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos',
+  'seiscientos', 'setecientos', 'ochocientos', 'novecientos',
+];
+
+/** «uno» se apocopa delante de mil y de millón: veintiún mil, no veintiuno mil. */
+function apocopar(s: string): string {
+  return s.replace(/veintiuno$/, 'veintiún').replace(/(^|\s)uno$/, '$1un');
+}
+
+function hasta999(n: number): string {
+  if (n === 100) return 'cien';
+  const c = Math.floor(n / 100);
+  const r = n % 100;
+  const partes: string[] = [];
+  if (c) partes.push(CENTENAS[c]);
+  if (r < 30) {
+    if (r) partes.push(UNIDADES[r]);
+  } else {
+    partes.push(DECENAS[Math.floor(r / 10)] + (r % 10 ? ` y ${UNIDADES[r % 10]}` : ''));
+  }
+  return partes.join(' ');
+}
+
+function hasta999999(n: number): string {
+  const miles = Math.floor(n / 1000);
+  const r = n % 1000;
+  const partes: string[] = [];
+  if (miles === 1) partes.push('mil');
+  else if (miles) partes.push(`${apocopar(hasta999(miles))} mil`);
+  if (r) partes.push(hasta999(r));
+  return partes.join(' ');
+}
+
+/**
+ * 400000 -> «Cuatro mil pesos 00/100 M.N.»
+ *
+ * Va en todo documento de cobro: es lo que impide que alguien añada un dígito
+ * a la cifra. Los centavos se escriben siempre como fracción, que es la forma
+ * en que se hace en México.
+ */
+export function enLetras(centavos: number): string {
+  const abs = Math.abs(Math.round(centavos));
+  const entero = Math.floor(abs / 100);
+  const cent = abs % 100;
+
+  let letras: string;
+  if (entero === 0) {
+    letras = 'cero';
+  } else {
+    const millones = Math.floor(entero / 1_000_000);
+    const resto = entero % 1_000_000;
+    const partes: string[] = [];
+    if (millones === 1) partes.push('un millón');
+    else if (millones) partes.push(`${apocopar(hasta999999(millones))} millones`);
+    if (resto) partes.push(hasta999999(resto));
+    letras = partes.join(' ');
+  }
+
+  // «uno» también se apocopa delante del sustantivo: un peso, mil un pesos.
+  letras = apocopar(letras);
+  // Y «millón/millones» pide la preposición cuando va pegado al sustantivo:
+  // dos millones DE pesos, pero un millón quinientos mil pesos.
+  const de = /mill(ón|ones)$/.test(letras) ? 'de ' : '';
+
+  const signo = centavos < 0 ? 'menos ' : '';
+  const frase = `${signo}${letras} ${de}${entero === 1 ? 'peso' : 'pesos'} ${String(cent).padStart(2, '0')}/100 M.N.`;
+  return frase.charAt(0).toUpperCase() + frase.slice(1);
+}
+
 export function fechaLarga(iso: string): string {
   const [a, m, d] = iso.slice(0, 10).split('-').map(Number);
   return new Date(a, m - 1, d).toLocaleDateString('es-MX', {

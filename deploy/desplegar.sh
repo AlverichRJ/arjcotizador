@@ -48,11 +48,19 @@ echo "==> Comprobando que las páginas respondan"
 # "activo" y la página se corta a media respuesta. Ya pasó — un import que
 # faltaba tumbó el editor mientras el despliegue decía "listo".
 DB="${DATOS_DIR:-/var/lib/arjcotizador}/cotizador.db"
-ULTIMA="$(sqlite3 "$DB" 'SELECT id FROM cotizaciones ORDER BY id DESC LIMIT 1' 2>/dev/null || true)"
+consulta() { sqlite3 "$DB" "$1" 2>/dev/null || true; }
+
+# Se prueba una de cada tipo: las cotizaciones y las notas de servicio no
+# comparten plantilla, así que una rota no se nota mirando la otra.
+ULTIMA="$(consulta "SELECT id FROM cotizaciones WHERE tipo != 'nota' ORDER BY id DESC LIMIT 1")"
+ULTIMA_NOTA="$(consulta "SELECT id FROM cotizaciones WHERE tipo = 'nota' ORDER BY id DESC LIMIT 1")"
 
 RUTAS="/"
 if [ -n "$ULTIMA" ]; then
   RUTAS="$RUTAS /cotizacion/$ULTIMA /cotizacion/$ULTIMA/imprimir /cotizacion/$ULTIMA/compra"
+fi
+if [ -n "$ULTIMA_NOTA" ]; then
+  RUTAS="$RUTAS /cotizacion/$ULTIMA_NOTA /cotizacion/$ULTIMA_NOTA/nota"
 fi
 
 FALLOS=0

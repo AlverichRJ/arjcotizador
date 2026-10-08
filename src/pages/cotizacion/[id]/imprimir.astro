@@ -9,6 +9,9 @@ export const prerender = false;
 const id = Number(Astro.params.id);
 const cot = obtenerCotizacion(id);
 if (!cot) return new Response('No existe esa cotización', { status: 404 });
+// Una nota de servicios tiene su propia hoja: desglose de tareas, importe con
+// letra y firmas. Quien llegue aquí con un folio NS va a donde le toca.
+if (cot.tipo === 'nota') return Astro.redirect(`/cotizacion/${id}/nota`, 303);
 
 const partidas = partidasDe(id);
 const t = totales(partidas);
