@@ -1,6 +1,6 @@
 # arjcotizador
 
-Cotizador interno de ARJ Solutions. **No es público**: vive en un subdominio
+Cotizador interno de ARJ SOLUTIONS. **No es público**: vive en un subdominio
 aparte, detrás de contraseña, y no se enlaza desde el sitio.
 
 Resuelve el flujo real: cae un proyecto, pegas los enlaces de los productos en

@@ -1,5 +1,5 @@
 /* ===========================================================================
-   Cotizador interno de ARJ Solutions.
+   Cotizador interno de ARJ SOLUTIONS.
 
    Dos pieles en una hoja:
    · la de trabajo, densa, pensada para teclear rápido;
@@ -257,7 +257,9 @@ input.num { font-family: var(--f-mono); text-align: right; }
 }
 
 .doc-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 18px; border-bottom: 2px solid var(--acc); }
-.doc-marca b { display: block; font-size: 26px; letter-spacing: -.035em; }
+/* El logotipo va todo en mayúsculas, y las mayúsculas piden menos apretón que
+   las minúsculas: el -.035em de antes las dejaba chocando. */
+.doc-marca b { display: block; font-size: 26px; letter-spacing: -.008em; }
 .doc-marca b em { font-style: normal; color: var(--acc); }
 .doc-marca span { display: block; margin-top: 4px; font-family: var(--f-mono); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .doc-marca .datos { margin-top: 10px; font-size: 11.5px; color: var(--ink-2); line-height: 1.55; text-transform: none; letter-spacing: 0; font-family: var(--f-disp); }

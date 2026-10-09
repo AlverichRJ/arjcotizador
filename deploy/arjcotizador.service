@@ -1,5 +1,5 @@
 [Unit]
-Description=Cotizador interno de ARJ Solutions
+Description=Cotizador interno de ARJ SOLUTIONS
 After=network.target
 
 [Service]

@@ -3,7 +3,7 @@
  * Es lo único que hay que tocar si cambia un teléfono o un correo.
  */
 export const empresa = {
-  nombre: 'ARJ Solutions',
+  nombre: 'ARJ SOLUTIONS',
   bajada: 'Ingeniería en sistemas · Infraestructura · Software',
   responsable: 'Ing. Jesús Alberto Suárez Nieto',
   // La cédula profesional NO va en la cotización: se quitó a petición de
